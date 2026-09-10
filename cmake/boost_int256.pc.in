@@ -1,0 +1,10 @@
+prefix=@CMAKE_INSTALL_PREFIX@
+exec_prefix=${prefix}
+libdir=${exec_prefix}/lib
+includedir=${prefix}/include
+
+Name: boost_int256
+Description: Portable and performant 256-bit numbers
+Version: @PROJECT_VERSION@
+Cflags: -I${includedir}
+Libs:
