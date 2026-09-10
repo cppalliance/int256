@@ -1,0 +1,15 @@
+{
+  "key": "int256",
+  "name": "Int256",
+  "authors": [
+    "Matt Borland"
+  ],
+  "maintainers": [
+    "Matt Borland <matt -at- mattborland.com>"
+  ],
+  "description": "Portable and Performant 256-bit Integers",
+  "category": [
+    "Math"
+  ],
+  "cxxstd": "14"
+}
