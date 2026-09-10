@@ -6,13 +6,7 @@
 
 require-b2 5.2 ;
 
-constant boost_dependencies :
-    /boost/assert//boost_int128 ;
-
-project /boost/int256
-    : common-requirements
-        <include>include
-    ;
+project /boost/int256 ;
 
 explicit
     [ alias boost_int256 : : : : <include>include <library>$(boost_dependencies) ]
@@ -20,5 +14,4 @@ explicit
     ;
 
 call-if : boost-library int256
-    : install boost_int256
     ;
