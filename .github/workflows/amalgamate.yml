@@ -1,0 +1,99 @@
+# Copyright 2025 Matt Borland
+# Distributed under the Boost Software License, Version 1.0.
+# https://www.boost.org/LICENSE_1_0.txt
+#
+# Regenerates the amalgamated single header in extra/single_include/ whenever
+# the real headers change on develop, and commits the result back.
+# The paths filter below does not include extra/single_include/, and the bot
+# commit carries [skip ci], so the push-back cannot retrigger this workflow
+# or the main CI.
+
+name: amalgamate
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - develop
+    paths:
+      - 'include/**'
+      - 'extra/amalgamate.py'
+      - '.github/workflows/amalgamate.yml'
+
+concurrency:
+  group: ${{format('{0}:amalgamate', github.repository)}}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  regenerate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Regenerate the single header
+        run: python3 extra/amalgamate.py
+
+      - name: Smoke test the single header
+        run: |
+          cat > "${RUNNER_TEMP}/smoke.cpp" << 'EOF'
+          // Smoke test for the amalgamated single header. Verifies the header is
+          // self-contained and core operations work end to end.
+
+          #include <boost/int256.hpp>
+          #include <iostream>
+          #include <limits>
+          #include <sstream>
+
+          int main()
+          {
+              using namespace boost::int256;
+              using namespace boost::int256::literals;
+
+              const auto a {BOOST_INT256_UINT256_C(115792089237316195423570985008687907853269984665640564039457584007913129639935)};
+              const auto b {18446744073709551615_u256};
+
+              if (a / b != 6277101735386680764176071790128604879584176795969512275969_u256)
+              {
+                  return 1;
+              }
+
+              if (popcount(a) != 256)
+              {
+                  return 2;
+              }
+
+              if (saturating_add(a, b) != (std::numeric_limits<uint256>::max)())
+              {
+                  return 3;
+              }
+
+              std::ostringstream os {};
+              os << a;
+              if (os.str() != "115792089237316195423570985008687907853269984665640564039457584007913129639935")
+              {
+                  return 4;
+              }
+
+              std::cout << "Single header smoke test passed: " << a << std::endl;
+              return 0;
+          }
+          EOF
+          for std in c++14 c++20; do
+            g++ -std=${std} -Wall -Wextra -I extra/single_include "${RUNNER_TEMP}/smoke.cpp" -o "${RUNNER_TEMP}/smoke"
+            "${RUNNER_TEMP}/smoke"
+          done
+
+      - name: Commit and push if changed
+        run: |
+          git add extra/single_include
+          if git diff --cached --quiet; then
+            echo 'Single header is already up to date'
+          else
+            git config user.name 'github-actions[bot]'
+            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+            git commit -m "Regenerate amalgamated single header from ${GITHUB_SHA} [skip ci]"
+            git push origin "HEAD:${GITHUB_REF_NAME}"
+          fi
