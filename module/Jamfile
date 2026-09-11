@@ -1,0 +1,47 @@
+# Copyright 2022 John Maddock
+# Copyright 2026 Matt Borland
+# Distributed under the Boost Software License, Version 1.0.
+# https://www.boost.org/LICENSE_1_0.txt
+
+# bring in the rules for testing
+require-b2 5.0.1 ;
+import-search /boost/config/checks ;
+import config : requires ;
+import modules ;
+import testing ;
+import path ;
+import pch ;
+import type ;
+
+# b2 registers the standard C++ suffixes (cpp cxx cc) but not cppm, so teach it
+# that the .cppm module interface unit is a C++ source.
+type.register-suffixes cppm : CPP ;
+
+project
+    : requirements
+      <toolset>msvc:<warnings>all
+      <toolset>msvc:<asynch-exceptions>on
+      <toolset>msvc:<cxxstd>latest
+
+      <toolset>gcc:<cxxflags>-fmodules-ts
+      <toolset>gcc:<cxxstd>23
+
+      <toolset>clang:<cxxstd>23
+    ;
+
+obj int256 : int256.cppm : <define>BOOST_INT256_EXPORT_TESTING <toolset>msvc:<cxxflags>-interface ;
+
+run quick_test.cpp int256 : : : <dependency>int256 ;
+run ../test/test_bit.cpp int256 : : : <dependency>int256 ;
+run ../test/test_byte_conversions.cpp int256 : : : <dependency>int256 ;
+run ../test/test_div.cpp int256 : : : <dependency>int256 ;
+run ../test/test_from_chars_bases.cpp int256 : : : <dependency>int256 ;
+run ../test/test_gcd_lcm.cpp int256 : : : <dependency>int256 ;
+run ../test/test_hash.cpp int256 : : : <dependency>int256 ;
+run ../test/test_int_div.cpp int256 : : : <dependency>int256 ;
+run ../test/test_ipow.cpp int256 : : : <dependency>int256 ;
+run ../test/test_isqrt.cpp int256 : : : <dependency>int256 ;
+run ../test/test_limits_u256.cpp int256 : : : <dependency>int256 ;
+run ../test/test_literals.cpp int256 : : : <dependency>int256 ;
+run ../test/test_midpoint.cpp int256 : : : <dependency>int256 ;
+run ../test/test_powm.cpp int256 : : : <dependency>int256 ;
