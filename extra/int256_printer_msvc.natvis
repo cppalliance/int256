@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<AutoVisualizer xmlns="http://schemas.microsoft.com/vstudio/debugger/natvis/2010">
+	<Type Name="boost::int256::uint256">
+		<DisplayString ExcludeView="dec;hex" LegacyAddin="int256_printer_msvc.dll" Export="formatter_u256_dec"/>
+		<DisplayString IncludeView="dec" LegacyAddin="int256_printer_msvc.dll" Export="formatter_u256_dec"/>
+		<DisplayString IncludeView="hex" LegacyAddin="int256_printer_msvc.dll" Export="formatter_u256_hex"/>
+	</Type>
+</AutoVisualizer>

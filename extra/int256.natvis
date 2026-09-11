@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Copyright 2026 Matt Borland
+  Distributed under the Boost Software License, Version 1.0.
+  https://www.boost.org/LICENSE_1_0.txt
+
+  NATVIS visualizer for boost::int256::uint256.
+
+  Place this file alongside your project or in:
+    %USERPROFILE%\Documents\Visual Studio <version>\Visualizers\
+
+  Values that fit in 64 bits are displayed in decimal.
+  Larger values are displayed as a synthesized hexadecimal value using
+  nibble-by-nibble extraction for guaranteed zero-padded output.
+-->
+<AutoVisualizer xmlns="http://schemas.microsoft.com/vstudio/debugger/natvis/2010">
+
+  <!-- uint256: unsigned 256-bit integer, words[0] least significant -->
+  <Type Name="boost::int256::uint256">
+    <DisplayString Condition="words[3] == 0 &amp;&amp; words[2] == 0 &amp;&amp; words[1] == 0">{words[0],d}</DisplayString>
+    <DisplayString>0x{words[3],nvohb}{words[2],nvohb}{words[1],nvohb}{words[0],nvohb}</DisplayString>
+    <Expand>
+      <Item Name="words[3]">words[3]</Item>
+      <Item Name="words[2]">words[2]</Item>
+      <Item Name="words[1]">words[1]</Item>
+      <Item Name="words[0]">words[0]</Item>
+    </Expand>
+  </Type>
+
+</AutoVisualizer>
