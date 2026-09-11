@@ -162,7 +162,7 @@ local windows_pipeline(name, image, environment, arch = "amd64") =
         "Linux 24.04 GCC 13 ARM64",
         "cppalliance/droneubuntu2404:multiarch",
         { TOOLSET: 'gcc', COMPILER: 'g++', CXXSTD: '03,11,14,17,2a' },
-        "libabsl-dev", arch="arm64",
+        arch="arm64",
     ),
 
     linux_pipeline(
@@ -183,7 +183,7 @@ local windows_pipeline(name, image, environment, arch = "amd64") =
         "Linux 24.04 GCC 13 S390x",
         "cppalliance/droneubuntu2404:multiarch",
         { TOOLSET: 'gcc', COMPILER: 'g++', CXXSTD: '03,11,14,17,2a' },
-        "libabsl-dev", arch="s390x",
+        arch="s390x",
     ),
 
     linux_pipeline(
@@ -294,7 +294,7 @@ local windows_pipeline(name, image, environment, arch = "amd64") =
         "Linux 26.04 GCC 16 64",
         "cppalliance/droneubuntu2604:1",
         { TOOLSET: 'gcc', COMPILER: 'g++-16', CXXSTD: '03,11,14,17,20,23', ADDRMD: '64', CXXFLAGS: "-fexcess-precision=fast" },
-        "g++-16-multilib libabsl-dev",
+        "g++-16-multilib",
     ),
 
     linux_pipeline(
