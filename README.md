@@ -5,7 +5,7 @@ Portable implementation of 256-bit integers
 |------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------|-------------|
 | Drone            | [![Build Status](https://drone.cpp.al/api/badges/cppalliance/int256/status.svg?ref=refs/heads/master)](https://drone.cpp.al/cppalliance/int256)                 | [![Build Status](https://drone.cpp.al/api/badges/cppalliance/int256/status.svg?ref=refs/heads/develop)](https://drone.cpp.al/cppalliance/int256) |
 | Github Actions   | [![CI](https://github.com/cppalliance/int256/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/cppalliance/int256/actions/workflows/ci.yml) | [![CI](https://github.com/cppalliance/int256/actions/workflows/ci.yml/badge.svg?branch=develop)](https://github.com/cppalliance/int256/actions/workflows/ci.yml)
-| Codecov          | [![codecov](https://codecov.io/gh/cppalliance/int256/branch/master/graph/badge.svg?token=KWY7M64xhh)](https://codecov.io/gh/cppalliance/int256) | [![codecov](https://codecov.io/gh/cppalliance/int256/graph/badge.svg?token=drvY8nnV5S)](https://codecov.io/gh/cppalliance/int256) |
+| Codecov          | [![codecov](https://codecov.io/gh/cppalliance/int256/branch/master/graph/badge.svg?token=BlsDTjdchH)](https://codecov.io/gh/cppalliance/int256) | [![codecov](https://codecov.io/gh/cppalliance/int256/graph/badge.svg?token=BlsDTjdchH)](https://codecov.io/gh/cppalliance/int256) |
 ---
 
 # How To Use The Library
