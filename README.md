@@ -1,5 +1,5 @@
-# Boost.int128
-Portable implementations of signed and unsigned 128-bit integers
+# Boost.Int256
+Portable implementation of 256-bit integers
 
 |                  | Master                                                                                                                                                            |   Develop   |
 |------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------|-------------|
@@ -10,10 +10,10 @@ Portable implementations of signed and unsigned 128-bit integers
 
 # How To Use The Library
 
-This library is header only and requires C++14 or newer.
+This library is header only and requires C++14 or newer. It contains no other dependencies.
+Simply `#include` it and use it.
+The library is also available as a single header [here](https://github.com/cppalliance/int256/blob/develop/extra/single_include/boost/int256.hpp), which CI regenerates from `include/` on every change.
 With C++20 and greater you can instead `import boost.int256`.
-
-You can also try the library out on [Compiler Explorer](https://godbolt.org/z/3q4zce41d).
 
 ## CMake
 
@@ -43,25 +43,28 @@ as well as emulated PPC64LE using QEMU with the following compilers:
 * GCC 5 and later
 * Clang 5 and later
 * Visual Studio 2017 (14.1) and later
-* Intel OneAPI DPC++
+* Intel OneAPI DPC++ 2024.2 and later
+* NVCC 12.8 and later
 
 # Synopsis
 
-Int256 provides 2 types:
+Int256 provides one type:
 
 ```cpp
 namespace boost {
 namespace int256 {
 
 struct uint256;
-struct int256;
 
 } //namespace int256
 } //namespace boost
 ```
 
-These types operate like built-in integer types.
-They have their own implementations of the Standard-Library functions
+A signed `int256` is planned for a following release, and will use the same
+header layout, macro names, and word order.
+
+The type operates like a built-in integer type.
+It has its own implementations of the Standard-Library functions
 (e.g., like those found in `<limits>`, `<iostream>`, `<bit>` etc.).
 
 The entire library can be conveniently included with `#include <boost/int256.hpp>`
