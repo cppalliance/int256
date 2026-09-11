@@ -1,0 +1,13 @@
+{
+  "name": "int256",
+  "version": "1.0.0",
+  "description": "Portable and performant 256-bit integers",
+  "homepage": "https://github.com/cppalliance/int256",
+  "license": "BSL-1.0",
+  "dependencies": [
+    {
+      "name": "vcpkg-cmake",
+      "host": true
+    }
+    ]
+}
