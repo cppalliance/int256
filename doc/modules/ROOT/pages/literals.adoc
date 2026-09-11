@@ -1,0 +1,83 @@
+////
+Copyright 2026 Matt Borland
+Distributed under the Boost Software License, Version 1.0.
+https://www.boost.org/LICENSE_1_0.txt
+////
+
+[#literals]
+= Literals
+:idprefix: literals_
+
+The following literals and macro are provided for convenient construction of the type provided in the library.
+
+[source, c++]
+----
+#include <boost/int256/literals.hpp>
+
+namespace boost {
+namespace int256 {
+namespace literals {
+
+BOOST_INT256_HOST_DEVICE constexpr uint256 operator ""_u256(const char* str) noexcept;
+
+BOOST_INT256_HOST_DEVICE constexpr uint256 operator ""_U256(const char* str) noexcept;
+
+BOOST_INT256_HOST_DEVICE constexpr uint256 operator ""_u256(const char* str, std::size_t len) noexcept;
+
+BOOST_INT256_HOST_DEVICE constexpr uint256 operator ""_U256(const char* str, std::size_t len) noexcept;
+
+} // namespace literals
+} // namespace int256
+} // namespace boost
+
+#define BOOST_INT256_UINT256_C(x) ...
+
+----
+
+The macro at the end allows you to write out a 256-bit number the way you would with `UINT64_C`, without having to add quotes.
+It is defined in `<boost/int256/detail/literal_macros.hpp>`, which `literals.hpp` includes, and needs no `using namespace`.
+
+== Bases
+
+The literals accept the standard pass:[C++] integer base prefixes in addition to plain decimal.
+A `0x` or `0X` prefix selects hexadecimal, `0b` or `0B` selects binary, and a leading `0` selects octal.
+The prefix is stripped and the remaining digits are parsed in the selected base.
+Digit separators (`'`) may be used in any base.
+
+[source, c++]
+----
+0xDEAD'BEEF_u256    // hexadecimal, == 3735928559
+0b1111'0000_u256    // binary,      == 240
+0777_u256           // octal,       == 511
+255_u256            // decimal,     == 255
+"115792089237316195423570985008687907853269984665640564039457584007913129639935"_u256  // the max
+----
+
+== Error Handling
+
+An invalid literal is rejected at compile time rather than being silently accepted.
+This includes a value that overflows the type, a digit that is not valid for the selected base (for example `0b2` or `09`), and an empty magnitude such as `0x`.
+When such a literal is used in a constant expression the parse reaches `BOOST_INT256_UNREACHABLE`, which is not a constant expression and therefore is a hard compile error.
+
+The maximum is accepted and one past it is rejected, so `pass:[...639935_u256]` compiles and `pass:[...639936_u256]` does not.
+
+See the xref:examples.adoc#examples_construction[construction examples] for usage demonstrations of both the literals and the macro.
+
+== Design Rationale
+
+All of the user-defined literals provided by the library are string-form: the operator receives a `const char*` and parses the digit sequence.
+This holds even for raw numeric tokens like `12345_U256`, which the compiler forwards to the operator as the string `"12345"`.
+The choice is intentional.
+A 256-bit value cannot be represented by `unsigned long long`, so any literal whose magnitude exceeds 2^64^ must go through a string-based parse.
+Providing only the string form means there is a single overload that handles every magnitude uniformly, rather than a numeric form for small values and a string form for large ones with a hard cutoff at 2^64^.
+The API is the same regardless of how large the value is.
+The trade-off is that every literal pays the cost of parsing, even when the value would fit in a built-in integer.
+For values smaller than 2^64^, prefer the constructor:
+
+[source, c++]
+----
+constexpr uint256 small {42U};        // direct conversion from a builtin
+const auto small_literal {42_U256};   // parses "42" and then constructs
+----
+
+The two produce the same value, but the constructor avoids the parse and should be used in hot paths or in code where many small constants are constructed.

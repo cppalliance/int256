@@ -1,0 +1,27 @@
+////
+Copyright 2026 Matt Borland
+Distributed under the Boost Software License, Version 1.0.
+https://www.boost.org/LICENSE_1_0.txt
+////
+
+[#mp]
+= Comparison to Boost.Multiprecision
+
+An easy question to ask is why this is a separate library from https://www.boost.org/doc/libs/release/libs/multiprecision/doc/html/index.html[Boost.Multiprecision], which already provides a 256-bit integer.
+There are several reasons why:
+
+- The two types are not the same shape.
+`boost::multiprecision::uint256_t` is `number<cpp_int_backend<256, 256, unsigned_magnitude, unchecked, void>>`, which stores a limb count and a sign next to the limbs, so `sizeof` is larger than 32 bytes and the object representation is not simply the value.
+`uint256` is exactly 32 bytes, trivially copyable, and standard layout, so it can be `memcpy`-ed, written into a packet or a file format, stored in an array that a hardware instruction can load, or handed to a GPU kernel.
+
+- The goal is for this library to be extremely lightweight.
+It has no Boost dependencies at all, whereas https://pdimov.github.io/boostdep-report/develop/module-weights.html[Boost.Multiprecision has a module weight of 25].
+
+- In Boost.Multiprecision every type is built on the high-level `number` template so that all of the backends interoperate.
+`uint256` is a single concrete struct with individually implemented operators, designed to work with and act like the built-in integer types.
+
+- `uint256` is usable in constant expressions from pass:[C++14] onward, and on CUDA and SYCL devices, neither of which a `cpp_int` backed type supports.
+
+None of that makes this library a replacement for Boost.Multiprecision.
+If the width is not fixed, or if more than 256 bits, signed magnitude arithmetic, checked arithmetic, or rational and floating-point backends are needed, Boost.Multiprecision is the right tool.
+The library's own differential tests use `boost::multiprecision::uint256_t` as the oracle for exactly that reason.

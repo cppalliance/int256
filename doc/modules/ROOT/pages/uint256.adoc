@@ -1,0 +1,924 @@
+////
+Copyright 2026 Matt Borland
+Distributed under the Boost Software License, Version 1.0.
+https://www.boost.org/LICENSE_1_0.txt
+////
+
+[#uint256]
+= uint256
+:idprefix: uint256_
+
+== Description
+
+`uint256` is an unsigned 256-bit integer.
+
+[source, c++]
+----
+#include <boost/int256.hpp>
+
+namespace boost {
+namespace int256 {
+
+struct uint256 {
+
+    // words[0] is the least significant word on every platform
+    std::uint64_t words[4] {};
+
+    // Constructors, conversion operators, and member operators
+    // documented in detail below...
+};
+
+} // namespace int256
+} // namespace boost
+----
+
+The type provides:
+
+* Constructors from all built-in integer types, from the four 64-bit words, and from the built-in floating-point types
+* Conversion operators to built-in integer and floating-point types
+* Full set of comparison operators (`<`, `<=`, `>`, `>=`, `==`, `!=`), and `pass:[<=>]` where the standard library provides it
+* Bitwise operators (`~`, `|`, `&`, `^`, `<<`, `>>`)
+* Arithmetic operators (`+`, `-`, `*`, `/`, `%`)
+* Compound assignment variants of all binary operators
+* Increment and decrement operators (`++`, `--`)
+
+A signed `int256` is planned for a following release and will use the same layout and word order.
+
+[#u256_layout]
+== Layout and Alignment
+
+The single data member is an array of four `std::uint64_t`, and `words[0]` is the least significant word on every platform, including big-endian ones.
+The library does not reorder the words by endianness: there is no native 256-bit type to match layouts with, so a fixed order keeps one code path to test and keeps constant evaluation and run time identical.
+On a big-endian host the object representation is therefore mixed-endian, with big-endian bytes inside each word and the words ascending from least significant. Only the native-order byte functions can observe that; see xref:byte_conversions.adoc[Byte Order Conversions].
+
+[source, c++]
+----
+static_assert(sizeof(uint256) == 32, "");
+static_assert(alignof(uint256) == alignof(std::uint64_t), "");
+static_assert(std::is_trivially_copyable<uint256>::value, "");
+static_assert(std::is_standard_layout<uint256>::value, "");
+----
+
+The type is deliberately not over-aligned. pass:[C++14] has no aligned `operator new`, so an over-aligned element type would make `std::vector<uint256>` ill-behaved, and MSVC warns about over-aligned aggregates passed by value.
+The SIMD paths inside the library load through `std::memcpy` into a vector local rather than casting a pointer to the object, so nothing depends on more than 8-byte alignment.
+
+[#u256_operator_behavior]
+== Operator Behavior
+
+All comparison, arithmetic, bitwise, and shift operators are defined between `uint256` and any built-in integer type, signed or unsigned, and, where the compiler provides them, against `pass:[__int128]` and `pass:[unsigned __int128]`.
+The operators that the built-in integers allow with a floating-point operand, that is `+`, `-`, `*`, `/`, the six comparisons, `pass:[<=>]`, and their compound assignment forms, are additionally defined between `uint256` and `float`, `double`, and `long double`.
+Their behavior follows the pass:[C++] usual arithmetic conversions and is value-identical to what the equivalent built-in unsigned operation would produce at 256 bits.
+Specifically:
+
+* The signed operand (whether a small `intN_t` or `pass:[__int128]`) is converted to `uint256`, sign-extended into all four words for negatives, and the operation is performed unsigned with two's-complement wrap-around semantics. Arithmetic and bitwise operations return `uint256`.
+* For shift operators, the result type follows the left operand: `uint256 pass:[<<] T` and `uint256 pass:[>>] T` always return `uint256`, regardless of `T`.
+* All comparison operators return `bool`, with the comparison performed on the operands after conversion to the common type.
+* Every compound assignment operator is also defined with the built-in integer on the left and the `uint256` on the right, in which case `i op= v` is `i = static_cast<decltype(i)>(i op v)`: the operation is performed in the common type and only the result is converted back, so the left operand keeps its own type. See xref:mixed_type_ops.adoc#mixed_ops_integer_compound[Compound Assignment onto a Built-in Integer].
+* A floating-point operand is the common type: the `uint256` is converted to it first and the operation is performed in floating point, so the result of an arithmetic operator is the floating-point type, not `uint256`. The modulo, bitwise, and shift operators reject a floating-point operand, as the built-in integers do. See xref:mixed_type_ops.adoc#mixed_ops_floating_point[Operations With Floating-Point Types].
+
+For example, `pass:[uint256{5} > -1]` returns `false` because the signed `-1` converts to a value greater than `5` under unsigned 256-bit arithmetic, exactly as `5U > -1` does at 32 bits.
+Use the xref:utilities.adoc#comparison[`cmp_*` family] when the mathematical answer is wanted instead.
+
+NOTE: Division or remainder by zero is undefined behavior, exactly as it is for the built-in integer types. The library performs no zero-divisor check, so the generated code matches a built-in division (a hardware trap on platforms that fault on integer division by zero), and in a constant expression it is a hard compile-time error just as `1U / 0U` is. See Division and Modulo below.
+
+See xref:mixed_type_ops.adoc[Mixed Type Operations] for the full set of cross-type signatures and detailed result-type rules.
+
+[#u256_constructors]
+== Constructors
+
+[source, c++]
+----
+namespace boost {
+namespace int256 {
+
+struct uint256
+{
+    ...
+
+    // Defaulted basic construction
+    constexpr uint256() noexcept = default;
+    constexpr uint256(const uint256&) noexcept = default;
+    constexpr uint256(uint256&&) noexcept = default;
+    constexpr uint256& operator=(const uint256&) noexcept = default;
+    constexpr uint256& operator=(uint256&&) noexcept = default;
+
+    // Construct from the four words, most significant first
+    BOOST_INT256_HOST_DEVICE constexpr uint256(const std::uint64_t w3, const std::uint64_t w2,
+                                               const std::uint64_t w1, const std::uint64_t w0) noexcept;
+
+    // Construct from integral types
+    template <BOOST_INT256_SIGNED_INTEGER_CONCEPT SignedInteger>
+    BOOST_INT256_HOST_DEVICE constexpr uint256(const SignedInteger v) noexcept;
+
+    template <BOOST_INT256_UNSIGNED_INTEGER_CONCEPT UnsignedInteger>
+    BOOST_INT256_HOST_DEVICE constexpr uint256(const UnsignedInteger v) noexcept;
+
+    #if defined(BOOST_INT256_HAS_INT128) || defined(BOOST_INT256_HAS_MSVC_INT128)
+
+    // Typically a typedef from __int128
+    BOOST_INT256_HOST_DEVICE BOOST_INT256_BUILTIN_CONSTEXPR uint256(const detail::builtin_i128 v) noexcept;
+
+    // Typically a typedef from unsigned __int128
+    BOOST_INT256_HOST_DEVICE BOOST_INT256_BUILTIN_CONSTEXPR uint256(const detail::builtin_u128 v) noexcept;
+
+    #endif
+
+    // Construct from floating-point types
+    template <BOOST_INT256_FLOATING_POINT_CONCEPT Float>
+    BOOST_INT256_HOST_DEVICE constexpr uint256(Float f) noexcept;
+};
+
+} // namespace int256
+} // namespace boost
+----
+
+None of the constructors are marked `explicit` in order to match the implicit conversion behavior of the built-in integer types.
+Integer constructors are subject to the mixed sign rules discussed xref:uint256.adoc#u256_operator_behavior[above]: a negative value is sign-extended into all four words, so `pass:[uint256{-1}]` is the maximum value rather than an error.
+
+The word constructor takes its arguments most significant first, so `pass:[uint256{0, 0, 1, 0}]` is 2^64^ and `pass:[uint256{a, b, c, d}]` is `a * 2^192^ + b * 2^128^ + c * 2^64^ + d`.
+There is no two-word constructor; use the four-word form or an implicit conversion from a built-in type.
+
+The floating-point constructor truncates toward zero, and for every value inside the range of `uint256` it produces exactly what a conversion to a 256-bit built-in unsigned type would produce.
+It is total instead of undefined outside that range, and saturates on every platform, mirroring libgcc's `pass:[__fixunsXfti]`: NaN and negative values yield zero, and values `>= 2^256^` (including positive infinity) saturate to the maximum.
+
+[#u256_conversions]
+== Conversions
+
+[source, c++]
+----
+namespace boost {
+namespace int256 {
+
+struct uint256
+{
+    ...
+
+    // Integer conversion operators
+    BOOST_INT256_HOST_DEVICE explicit constexpr operator bool() const noexcept;
+
+    template <BOOST_INT256_SIGNED_INTEGER_CONCEPT SignedInteger>
+    BOOST_INT256_HOST_DEVICE constexpr operator SignedInteger() const noexcept;
+
+    template <BOOST_INT256_UNSIGNED_INTEGER_CONCEPT UnsignedInteger>
+    BOOST_INT256_HOST_DEVICE constexpr operator UnsignedInteger() const noexcept;
+
+    #if defined(BOOST_INT256_HAS_INT128) || defined(BOOST_INT256_HAS_MSVC_INT128)
+
+    BOOST_INT256_HOST_DEVICE BOOST_INT256_BUILTIN_CONSTEXPR operator detail::builtin_i128() const noexcept;
+
+    BOOST_INT256_HOST_DEVICE BOOST_INT256_BUILTIN_CONSTEXPR operator detail::builtin_u128() const noexcept;
+
+    #endif
+
+    // Conversion to floating point
+    BOOST_INT256_HOST_DEVICE constexpr operator float() const noexcept;
+    BOOST_INT256_HOST_DEVICE constexpr operator double() const noexcept;
+    constexpr operator long double() const noexcept; // There are no long doubles on device
+};
+
+} // namespace int256
+} // namespace boost
+----
+
+All conversion operators except `operator bool()` are implicit to match the behavior of built-in integer types.
+`operator bool()` is explicit so that a `uint256` cannot accidentally bind to a `bool` parameter; contextual conversions (`if (x)`, `!x`, and so on) still work.
+A conversion to a narrower integer keeps the low bits, which is what a `static_cast` between built-in integers does, so the upper words are simply dropped.
+Use xref:numeric.adoc#saturating_cast[`saturating_cast`] to clamp instead, or xref:utilities.adoc#in_range[`in_range`] to test first.
+
+Conversions to floating-point types are lossy whenever the value needs more bits than the target significand holds, which for a 256-bit type is the common case.
+When the value does not fit the significand it is rounded once, to nearest with ties to even, and a value above the range of the target type becomes infinity: every `uint256` above `2^256^ - 2^232^` becomes infinity as a `float`, and the maximum converts to exactly `2^256^` as a `double`.
+This holds whether or not the compiler provides a built-in 128-bit integer to use as an intermediate, so a value converts to the same bit pattern in either configuration.
+
+[#u256_comparison_operators]
+== Comparison Operators
+
+=== Less Than
+
+[source, c++]
+----
+BOOST_INT256_HOST_DEVICE constexpr bool operator<(const uint256& lhs, const uint256& rhs) noexcept;
+
+template <BOOST_INT256_SIGNED_INTEGER_CONCEPT SignedInteger>
+BOOST_INT256_HOST_DEVICE constexpr bool operator<(const uint256& lhs, const SignedInteger rhs) noexcept;
+
+template <BOOST_INT256_SIGNED_INTEGER_CONCEPT SignedInteger>
+BOOST_INT256_HOST_DEVICE constexpr bool operator<(const SignedInteger lhs, const uint256& rhs) noexcept;
+
+template <BOOST_INT256_UNSIGNED_INTEGER_CONCEPT UnsignedInteger>
+BOOST_INT256_HOST_DEVICE constexpr bool operator<(const uint256& lhs, const UnsignedInteger rhs) noexcept;
+
+template <BOOST_INT256_UNSIGNED_INTEGER_CONCEPT UnsignedInteger>
+BOOST_INT256_HOST_DEVICE constexpr bool operator<(const UnsignedInteger lhs, const uint256& rhs) noexcept;
+
+// And, where the compiler provides them, the four builtin 128-bit flavors
+#if defined(BOOST_INT256_HAS_INT128) || defined(BOOST_INT256_HAS_MSVC_INT128)
+BOOST_INT256_HOST_DEVICE BOOST_INT256_BUILTIN_CONSTEXPR bool operator<(const uint256& lhs, const detail::builtin_u128 rhs) noexcept;
+BOOST_INT256_HOST_DEVICE BOOST_INT256_BUILTIN_CONSTEXPR bool operator<(const detail::builtin_u128 lhs, const uint256& rhs) noexcept;
+BOOST_INT256_HOST_DEVICE BOOST_INT256_BUILTIN_CONSTEXPR bool operator<(const uint256& lhs, const detail::builtin_i128 rhs) noexcept;
+BOOST_INT256_HOST_DEVICE BOOST_INT256_BUILTIN_CONSTEXPR bool operator<(const detail::builtin_i128 lhs, const uint256& rhs) noexcept;
+#endif
+----
+
+Returns whether the `lhs` value is less than the `rhs` value without exception.
+This operation is subject to the mixed sign rules discussed xref:uint256.adoc#u256_operator_behavior[above].
+A floating-point right or left operand is also accepted, in which case the result follows xref:mixed_type_ops.adoc#mixed_ops_floating_point[Operations With Floating-Point Types].
+
+=== Less Than or Equal To
+
+[source, c++]
+----
+BOOST_INT256_HOST_DEVICE constexpr bool operator<=(const uint256& lhs, const uint256& rhs) noexcept;
+
+template <BOOST_INT256_SIGNED_INTEGER_CONCEPT SignedInteger>
+BOOST_INT256_HOST_DEVICE constexpr bool operator<=(const uint256& lhs, const SignedInteger rhs) noexcept;
+
+template <BOOST_INT256_SIGNED_INTEGER_CONCEPT SignedInteger>
+BOOST_INT256_HOST_DEVICE constexpr bool operator<=(const SignedInteger lhs, const uint256& rhs) noexcept;
+
+template <BOOST_INT256_UNSIGNED_INTEGER_CONCEPT UnsignedInteger>
+BOOST_INT256_HOST_DEVICE constexpr bool operator<=(const uint256& lhs, const UnsignedInteger rhs) noexcept;
+
+template <BOOST_INT256_UNSIGNED_INTEGER_CONCEPT UnsignedInteger>
+BOOST_INT256_HOST_DEVICE constexpr bool operator<=(const UnsignedInteger lhs, const uint256& rhs) noexcept;
+
+// And, where the compiler provides them, the four builtin 128-bit flavors
+#if defined(BOOST_INT256_HAS_INT128) || defined(BOOST_INT256_HAS_MSVC_INT128)
+BOOST_INT256_HOST_DEVICE BOOST_INT256_BUILTIN_CONSTEXPR bool operator<=(const uint256& lhs, const detail::builtin_u128 rhs) noexcept;
+BOOST_INT256_HOST_DEVICE BOOST_INT256_BUILTIN_CONSTEXPR bool operator<=(const detail::builtin_u128 lhs, const uint256& rhs) noexcept;
+BOOST_INT256_HOST_DEVICE BOOST_INT256_BUILTIN_CONSTEXPR bool operator<=(const uint256& lhs, const detail::builtin_i128 rhs) noexcept;
+BOOST_INT256_HOST_DEVICE BOOST_INT256_BUILTIN_CONSTEXPR bool operator<=(const detail::builtin_i128 lhs, const uint256& rhs) noexcept;
+#endif
+----
+
+Returns whether the `lhs` value is less than or equal to the `rhs` value without exception.
+This operation is subject to the mixed sign rules discussed xref:uint256.adoc#u256_operator_behavior[above].
+A floating-point right or left operand is also accepted, in which case the result follows xref:mixed_type_ops.adoc#mixed_ops_floating_point[Operations With Floating-Point Types].
+
+=== Greater Than
+
+[source, c++]
+----
+BOOST_INT256_HOST_DEVICE constexpr bool operator>(const uint256& lhs, const uint256& rhs) noexcept;
+
+template <BOOST_INT256_SIGNED_INTEGER_CONCEPT SignedInteger>
+BOOST_INT256_HOST_DEVICE constexpr bool operator>(const uint256& lhs, const SignedInteger rhs) noexcept;
+
+template <BOOST_INT256_SIGNED_INTEGER_CONCEPT SignedInteger>
+BOOST_INT256_HOST_DEVICE constexpr bool operator>(const SignedInteger lhs, const uint256& rhs) noexcept;
+
+template <BOOST_INT256_UNSIGNED_INTEGER_CONCEPT UnsignedInteger>
+BOOST_INT256_HOST_DEVICE constexpr bool operator>(const uint256& lhs, const UnsignedInteger rhs) noexcept;
+
+template <BOOST_INT256_UNSIGNED_INTEGER_CONCEPT UnsignedInteger>
+BOOST_INT256_HOST_DEVICE constexpr bool operator>(const UnsignedInteger lhs, const uint256& rhs) noexcept;
+
+// And, where the compiler provides them, the four builtin 128-bit flavors
+#if defined(BOOST_INT256_HAS_INT128) || defined(BOOST_INT256_HAS_MSVC_INT128)
+BOOST_INT256_HOST_DEVICE BOOST_INT256_BUILTIN_CONSTEXPR bool operator>(const uint256& lhs, const detail::builtin_u128 rhs) noexcept;
+BOOST_INT256_HOST_DEVICE BOOST_INT256_BUILTIN_CONSTEXPR bool operator>(const detail::builtin_u128 lhs, const uint256& rhs) noexcept;
+BOOST_INT256_HOST_DEVICE BOOST_INT256_BUILTIN_CONSTEXPR bool operator>(const uint256& lhs, const detail::builtin_i128 rhs) noexcept;
+BOOST_INT256_HOST_DEVICE BOOST_INT256_BUILTIN_CONSTEXPR bool operator>(const detail::builtin_i128 lhs, const uint256& rhs) noexcept;
+#endif
+----
+
+Returns whether the `lhs` value is greater than the `rhs` value without exception.
+This operation is subject to the mixed sign rules discussed xref:uint256.adoc#u256_operator_behavior[above].
+A floating-point right or left operand is also accepted, in which case the result follows xref:mixed_type_ops.adoc#mixed_ops_floating_point[Operations With Floating-Point Types].
+
+=== Greater Than or Equal To
+
+[source, c++]
+----
+BOOST_INT256_HOST_DEVICE constexpr bool operator>=(const uint256& lhs, const uint256& rhs) noexcept;
+
+template <BOOST_INT256_SIGNED_INTEGER_CONCEPT SignedInteger>
+BOOST_INT256_HOST_DEVICE constexpr bool operator>=(const uint256& lhs, const SignedInteger rhs) noexcept;
+
+template <BOOST_INT256_SIGNED_INTEGER_CONCEPT SignedInteger>
+BOOST_INT256_HOST_DEVICE constexpr bool operator>=(const SignedInteger lhs, const uint256& rhs) noexcept;
+
+template <BOOST_INT256_UNSIGNED_INTEGER_CONCEPT UnsignedInteger>
+BOOST_INT256_HOST_DEVICE constexpr bool operator>=(const uint256& lhs, const UnsignedInteger rhs) noexcept;
+
+template <BOOST_INT256_UNSIGNED_INTEGER_CONCEPT UnsignedInteger>
+BOOST_INT256_HOST_DEVICE constexpr bool operator>=(const UnsignedInteger lhs, const uint256& rhs) noexcept;
+
+// And, where the compiler provides them, the four builtin 128-bit flavors
+#if defined(BOOST_INT256_HAS_INT128) || defined(BOOST_INT256_HAS_MSVC_INT128)
+BOOST_INT256_HOST_DEVICE BOOST_INT256_BUILTIN_CONSTEXPR bool operator>=(const uint256& lhs, const detail::builtin_u128 rhs) noexcept;
+BOOST_INT256_HOST_DEVICE BOOST_INT256_BUILTIN_CONSTEXPR bool operator>=(const detail::builtin_u128 lhs, const uint256& rhs) noexcept;
+BOOST_INT256_HOST_DEVICE BOOST_INT256_BUILTIN_CONSTEXPR bool operator>=(const uint256& lhs, const detail::builtin_i128 rhs) noexcept;
+BOOST_INT256_HOST_DEVICE BOOST_INT256_BUILTIN_CONSTEXPR bool operator>=(const detail::builtin_i128 lhs, const uint256& rhs) noexcept;
+#endif
+----
+
+Returns whether the `lhs` value is greater than or equal to the `rhs` value without exception.
+This operation is subject to the mixed sign rules discussed xref:uint256.adoc#u256_operator_behavior[above].
+A floating-point right or left operand is also accepted, in which case the result follows xref:mixed_type_ops.adoc#mixed_ops_floating_point[Operations With Floating-Point Types].
+
+=== Equality
+
+[source, c++]
+----
+BOOST_INT256_HOST_DEVICE constexpr bool operator==(const uint256& lhs, const uint256& rhs) noexcept;
+
+template <BOOST_INT256_SIGNED_INTEGER_CONCEPT SignedInteger>
+BOOST_INT256_HOST_DEVICE constexpr bool operator==(const uint256& lhs, const SignedInteger rhs) noexcept;
+
+template <BOOST_INT256_SIGNED_INTEGER_CONCEPT SignedInteger>
+BOOST_INT256_HOST_DEVICE constexpr bool operator==(const SignedInteger lhs, const uint256& rhs) noexcept;
+
+template <BOOST_INT256_UNSIGNED_INTEGER_CONCEPT UnsignedInteger>
+BOOST_INT256_HOST_DEVICE constexpr bool operator==(const uint256& lhs, const UnsignedInteger rhs) noexcept;
+
+template <BOOST_INT256_UNSIGNED_INTEGER_CONCEPT UnsignedInteger>
+BOOST_INT256_HOST_DEVICE constexpr bool operator==(const UnsignedInteger lhs, const uint256& rhs) noexcept;
+
+// And, where the compiler provides them, the four builtin 128-bit flavors
+#if defined(BOOST_INT256_HAS_INT128) || defined(BOOST_INT256_HAS_MSVC_INT128)
+BOOST_INT256_HOST_DEVICE BOOST_INT256_BUILTIN_CONSTEXPR bool operator==(const uint256& lhs, const detail::builtin_u128 rhs) noexcept;
+BOOST_INT256_HOST_DEVICE BOOST_INT256_BUILTIN_CONSTEXPR bool operator==(const detail::builtin_u128 lhs, const uint256& rhs) noexcept;
+BOOST_INT256_HOST_DEVICE BOOST_INT256_BUILTIN_CONSTEXPR bool operator==(const uint256& lhs, const detail::builtin_i128 rhs) noexcept;
+BOOST_INT256_HOST_DEVICE BOOST_INT256_BUILTIN_CONSTEXPR bool operator==(const detail::builtin_i128 lhs, const uint256& rhs) noexcept;
+#endif
+----
+
+Returns whether the `lhs` value is equal to the `rhs` value without exception.
+This operation is subject to the mixed sign rules discussed xref:uint256.adoc#u256_operator_behavior[above].
+A floating-point right or left operand is also accepted, in which case the result follows xref:mixed_type_ops.adoc#mixed_ops_floating_point[Operations With Floating-Point Types].
+
+=== Inequality
+
+[source, c++]
+----
+BOOST_INT256_HOST_DEVICE constexpr bool operator!=(const uint256& lhs, const uint256& rhs) noexcept;
+
+template <BOOST_INT256_SIGNED_INTEGER_CONCEPT SignedInteger>
+BOOST_INT256_HOST_DEVICE constexpr bool operator!=(const uint256& lhs, const SignedInteger rhs) noexcept;
+
+template <BOOST_INT256_SIGNED_INTEGER_CONCEPT SignedInteger>
+BOOST_INT256_HOST_DEVICE constexpr bool operator!=(const SignedInteger lhs, const uint256& rhs) noexcept;
+
+template <BOOST_INT256_UNSIGNED_INTEGER_CONCEPT UnsignedInteger>
+BOOST_INT256_HOST_DEVICE constexpr bool operator!=(const uint256& lhs, const UnsignedInteger rhs) noexcept;
+
+template <BOOST_INT256_UNSIGNED_INTEGER_CONCEPT UnsignedInteger>
+BOOST_INT256_HOST_DEVICE constexpr bool operator!=(const UnsignedInteger lhs, const uint256& rhs) noexcept;
+
+// And, where the compiler provides them, the four builtin 128-bit flavors
+#if defined(BOOST_INT256_HAS_INT128) || defined(BOOST_INT256_HAS_MSVC_INT128)
+BOOST_INT256_HOST_DEVICE BOOST_INT256_BUILTIN_CONSTEXPR bool operator!=(const uint256& lhs, const detail::builtin_u128 rhs) noexcept;
+BOOST_INT256_HOST_DEVICE BOOST_INT256_BUILTIN_CONSTEXPR bool operator!=(const detail::builtin_u128 lhs, const uint256& rhs) noexcept;
+BOOST_INT256_HOST_DEVICE BOOST_INT256_BUILTIN_CONSTEXPR bool operator!=(const uint256& lhs, const detail::builtin_i128 rhs) noexcept;
+BOOST_INT256_HOST_DEVICE BOOST_INT256_BUILTIN_CONSTEXPR bool operator!=(const detail::builtin_i128 lhs, const uint256& rhs) noexcept;
+#endif
+----
+
+Returns whether the `lhs` value is not equal to the `rhs` value without exception.
+This operation is subject to the mixed sign rules discussed xref:uint256.adoc#u256_operator_behavior[above].
+A floating-point right or left operand is also accepted, in which case the result follows xref:mixed_type_ops.adoc#mixed_ops_floating_point[Operations With Floating-Point Types].
+
+=== Spaceship Operator (Requires pass:[C++20])
+
+[source, c++]
+----
+BOOST_INT256_HOST_DEVICE constexpr std::strong_ordering operator<=>(const uint256& lhs, const uint256& rhs) noexcept;
+
+template <BOOST_INT256_SIGNED_INTEGER_CONCEPT SignedInteger>
+BOOST_INT256_HOST_DEVICE constexpr std::strong_ordering operator<=>(const uint256& lhs, const SignedInteger rhs) noexcept;
+
+template <BOOST_INT256_UNSIGNED_INTEGER_CONCEPT UnsignedInteger>
+BOOST_INT256_HOST_DEVICE constexpr std::strong_ordering operator<=>(const uint256& lhs, const UnsignedInteger rhs) noexcept;
+
+template <BOOST_INT256_FLOATING_POINT_CONCEPT Float>
+BOOST_INT256_HOST_DEVICE constexpr std::partial_ordering operator<=>(const uint256& lhs, const Float rhs) noexcept;
+----
+
+Available when `BOOST_INT256_HAS_SPACESHIP_OPERATOR` is defined, which requires pass:[C++20] and a standard library that provides `<compare>`.
+Against an integer operand it returns one of the following without exception:
+
+- `std::strong_ordering::less` if `lhs < rhs`
+- `std::strong_ordering::equivalent` if `lhs == rhs`
+- `std::strong_ordering::greater` otherwise (implies `lhs > rhs`)
+
+A floating-point operand yields a `std::partial_ordering`, which is `unordered` when that operand is NaN.
+
+[#u256_bitwise_operators]
+== Bitwise Operators
+
+=== Complement
+
+[source, c++]
+----
+BOOST_INT256_HOST_DEVICE constexpr uint256 operator~(const uint256& rhs) noexcept;
+----
+
+Returns the bitwise complement of `rhs` without exception.
+
+=== Or
+
+[source, c++]
+----
+BOOST_INT256_HOST_DEVICE constexpr uint256 operator|(const uint256& lhs, const uint256& rhs) noexcept;
+
+template <BOOST_INT256_SIGNED_INTEGER_CONCEPT SignedInteger>
+BOOST_INT256_HOST_DEVICE constexpr uint256 operator|(const uint256& lhs, const SignedInteger rhs) noexcept;
+
+template <BOOST_INT256_SIGNED_INTEGER_CONCEPT SignedInteger>
+BOOST_INT256_HOST_DEVICE constexpr uint256 operator|(const SignedInteger lhs, const uint256& rhs) noexcept;
+
+template <BOOST_INT256_UNSIGNED_INTEGER_CONCEPT UnsignedInteger>
+BOOST_INT256_HOST_DEVICE constexpr uint256 operator|(const uint256& lhs, const UnsignedInteger rhs) noexcept;
+
+template <BOOST_INT256_UNSIGNED_INTEGER_CONCEPT UnsignedInteger>
+BOOST_INT256_HOST_DEVICE constexpr uint256 operator|(const UnsignedInteger lhs, const uint256& rhs) noexcept;
+
+// And, where the compiler provides them, the four builtin 128-bit flavors
+#if defined(BOOST_INT256_HAS_INT128) || defined(BOOST_INT256_HAS_MSVC_INT128)
+BOOST_INT256_HOST_DEVICE BOOST_INT256_BUILTIN_CONSTEXPR uint256 operator|(const uint256& lhs, const detail::builtin_u128 rhs) noexcept;
+BOOST_INT256_HOST_DEVICE BOOST_INT256_BUILTIN_CONSTEXPR uint256 operator|(const detail::builtin_u128 lhs, const uint256& rhs) noexcept;
+BOOST_INT256_HOST_DEVICE BOOST_INT256_BUILTIN_CONSTEXPR uint256 operator|(const uint256& lhs, const detail::builtin_i128 rhs) noexcept;
+BOOST_INT256_HOST_DEVICE BOOST_INT256_BUILTIN_CONSTEXPR uint256 operator|(const detail::builtin_i128 lhs, const uint256& rhs) noexcept;
+#endif
+----
+
+Returns the bitwise or of `lhs` and `rhs` without exception.
+This operation is subject to the mixed sign rules discussed xref:uint256.adoc#u256_operator_behavior[above].
+
+=== And
+
+[source, c++]
+----
+BOOST_INT256_HOST_DEVICE constexpr uint256 operator&(const uint256& lhs, const uint256& rhs) noexcept;
+
+template <BOOST_INT256_SIGNED_INTEGER_CONCEPT SignedInteger>
+BOOST_INT256_HOST_DEVICE constexpr uint256 operator&(const uint256& lhs, const SignedInteger rhs) noexcept;
+
+template <BOOST_INT256_SIGNED_INTEGER_CONCEPT SignedInteger>
+BOOST_INT256_HOST_DEVICE constexpr uint256 operator&(const SignedInteger lhs, const uint256& rhs) noexcept;
+
+template <BOOST_INT256_UNSIGNED_INTEGER_CONCEPT UnsignedInteger>
+BOOST_INT256_HOST_DEVICE constexpr uint256 operator&(const uint256& lhs, const UnsignedInteger rhs) noexcept;
+
+template <BOOST_INT256_UNSIGNED_INTEGER_CONCEPT UnsignedInteger>
+BOOST_INT256_HOST_DEVICE constexpr uint256 operator&(const UnsignedInteger lhs, const uint256& rhs) noexcept;
+
+// And, where the compiler provides them, the four builtin 128-bit flavors
+#if defined(BOOST_INT256_HAS_INT128) || defined(BOOST_INT256_HAS_MSVC_INT128)
+BOOST_INT256_HOST_DEVICE BOOST_INT256_BUILTIN_CONSTEXPR uint256 operator&(const uint256& lhs, const detail::builtin_u128 rhs) noexcept;
+BOOST_INT256_HOST_DEVICE BOOST_INT256_BUILTIN_CONSTEXPR uint256 operator&(const detail::builtin_u128 lhs, const uint256& rhs) noexcept;
+BOOST_INT256_HOST_DEVICE BOOST_INT256_BUILTIN_CONSTEXPR uint256 operator&(const uint256& lhs, const detail::builtin_i128 rhs) noexcept;
+BOOST_INT256_HOST_DEVICE BOOST_INT256_BUILTIN_CONSTEXPR uint256 operator&(const detail::builtin_i128 lhs, const uint256& rhs) noexcept;
+#endif
+----
+
+Returns the bitwise and of `lhs` and `rhs` without exception.
+This operation is subject to the mixed sign rules discussed xref:uint256.adoc#u256_operator_behavior[above].
+
+=== Xor
+
+[source, c++]
+----
+BOOST_INT256_HOST_DEVICE constexpr uint256 operator^(const uint256& lhs, const uint256& rhs) noexcept;
+
+template <BOOST_INT256_SIGNED_INTEGER_CONCEPT SignedInteger>
+BOOST_INT256_HOST_DEVICE constexpr uint256 operator^(const uint256& lhs, const SignedInteger rhs) noexcept;
+
+template <BOOST_INT256_SIGNED_INTEGER_CONCEPT SignedInteger>
+BOOST_INT256_HOST_DEVICE constexpr uint256 operator^(const SignedInteger lhs, const uint256& rhs) noexcept;
+
+template <BOOST_INT256_UNSIGNED_INTEGER_CONCEPT UnsignedInteger>
+BOOST_INT256_HOST_DEVICE constexpr uint256 operator^(const uint256& lhs, const UnsignedInteger rhs) noexcept;
+
+template <BOOST_INT256_UNSIGNED_INTEGER_CONCEPT UnsignedInteger>
+BOOST_INT256_HOST_DEVICE constexpr uint256 operator^(const UnsignedInteger lhs, const uint256& rhs) noexcept;
+
+// And, where the compiler provides them, the four builtin 128-bit flavors
+#if defined(BOOST_INT256_HAS_INT128) || defined(BOOST_INT256_HAS_MSVC_INT128)
+BOOST_INT256_HOST_DEVICE BOOST_INT256_BUILTIN_CONSTEXPR uint256 operator^(const uint256& lhs, const detail::builtin_u128 rhs) noexcept;
+BOOST_INT256_HOST_DEVICE BOOST_INT256_BUILTIN_CONSTEXPR uint256 operator^(const detail::builtin_u128 lhs, const uint256& rhs) noexcept;
+BOOST_INT256_HOST_DEVICE BOOST_INT256_BUILTIN_CONSTEXPR uint256 operator^(const uint256& lhs, const detail::builtin_i128 rhs) noexcept;
+BOOST_INT256_HOST_DEVICE BOOST_INT256_BUILTIN_CONSTEXPR uint256 operator^(const detail::builtin_i128 lhs, const uint256& rhs) noexcept;
+#endif
+----
+
+Returns the bitwise xor of `lhs` and `rhs` without exception.
+This operation is subject to the mixed sign rules discussed xref:uint256.adoc#u256_operator_behavior[above].
+
+=== Left Shift
+
+[source, c++]
+----
+template <BOOST_INT256_INTEGER_CONCEPT Integer>
+BOOST_INT256_HOST_DEVICE constexpr uint256 operator<<(const uint256& lhs, const Integer rhs) noexcept;
+
+BOOST_INT256_HOST_DEVICE constexpr uint256 operator<<(const uint256& lhs, const uint256& rhs) noexcept;
+
+// A built-in integer on the left keeps its own type after integral promotion
+template <BOOST_INT256_INTEGER_CONCEPT Integer>
+BOOST_INT256_HOST_DEVICE constexpr detail::promoted_t<Integer> operator<<(const Integer lhs, const uint256& rhs) noexcept;
+
+// When the compiler provides native 128-bit integers, a built-in 128-bit lhs
+// shifted by a uint256 returns that built-in type.
+#if defined(BOOST_INT256_HAS_INT128) || defined(BOOST_INT256_HAS_MSVC_INT128)
+BOOST_INT256_HOST_DEVICE BOOST_INT256_BUILTIN_CONSTEXPR detail::builtin_u128 operator<<(const detail::builtin_u128 lhs, const uint256& rhs) noexcept;
+BOOST_INT256_HOST_DEVICE BOOST_INT256_BUILTIN_CONSTEXPR detail::builtin_i128 operator<<(const detail::builtin_i128 lhs, const uint256& rhs) noexcept;
+#endif
+----
+
+Returns the bitwise left shift of `lhs` without exception.
+The shift count is the integer value of the right operand; when the right operand is a `uint256` only its low word is read.
+When the count is in the range `[0, 256)` the low bits vacated by the shift are filled with zero and bits shifted past bit 255 are discarded, so the value wraps modulo 2^256^.
+
+[WARNING]
+====
+Shifting by a count that is negative or greater than or equal to `256` (the operand width in bits) is *undefined behavior*, exactly as for the built-in shift operators and the native `pass:[__int128]` and `pass:[unsigned __int128]` types (`[expr.shift]` in the pass:[C++] standard). No result is guaranteed, not even zero, and inside a constant expression the program is ill-formed. Matching the built-in contract this way is what keeps the in-range operation branch-free.
+====
+
+When a built-in integer is the `lhs` and a `uint256` is the shift amount, the return type is the left operand after integral promotion, as it is for the built-in shift operators: a type of lesser rank than `int` promotes to `int` (or to `unsigned int` where `int` cannot represent every value), and, where the compiler provides them, the native 128-bit types return their own type.
+This operation is subject to the mixed sign rules discussed xref:uint256.adoc#u256_operator_behavior[above].
+
+=== Right Shift
+
+[source, c++]
+----
+template <BOOST_INT256_INTEGER_CONCEPT Integer>
+BOOST_INT256_HOST_DEVICE constexpr uint256 operator>>(const uint256& lhs, const Integer rhs) noexcept;
+
+BOOST_INT256_HOST_DEVICE constexpr uint256 operator>>(const uint256& lhs, const uint256& rhs) noexcept;
+
+// A built-in integer on the left keeps its own type after integral promotion
+template <BOOST_INT256_INTEGER_CONCEPT Integer>
+BOOST_INT256_HOST_DEVICE constexpr detail::promoted_t<Integer> operator>>(const Integer lhs, const uint256& rhs) noexcept;
+
+// When the compiler provides native 128-bit integers, a built-in 128-bit lhs
+// shifted by a uint256 returns that built-in type.
+#if defined(BOOST_INT256_HAS_INT128) || defined(BOOST_INT256_HAS_MSVC_INT128)
+BOOST_INT256_HOST_DEVICE BOOST_INT256_BUILTIN_CONSTEXPR detail::builtin_u128 operator>>(const detail::builtin_u128 lhs, const uint256& rhs) noexcept;
+BOOST_INT256_HOST_DEVICE BOOST_INT256_BUILTIN_CONSTEXPR detail::builtin_i128 operator>>(const detail::builtin_i128 lhs, const uint256& rhs) noexcept;
+#endif
+----
+
+Returns the bitwise right shift of `lhs` without exception.
+The shift count is the integer value of the right operand; when the right operand is a `uint256` only its low word is read.
+When the count is in the range `[0, 256)` the shift is logical: the high bits vacated by the shift are filled with zero.
+
+[WARNING]
+====
+Shifting by a count that is negative or greater than or equal to `256` (the operand width in bits) is *undefined behavior*, exactly as for the built-in shift operators and the native `pass:[__int128]` and `pass:[unsigned __int128]` types (`[expr.shift]` in the pass:[C++] standard). No result is guaranteed, not even zero, and inside a constant expression the program is ill-formed. Matching the built-in contract this way is what keeps the in-range operation branch-free.
+====
+
+When a built-in integer is the `lhs` and a `uint256` is the shift amount, the return type is the left operand after integral promotion, as it is for the built-in shift operators: a type of lesser rank than `int` promotes to `int` (or to `unsigned int` where `int` cannot represent every value), and, where the compiler provides them, the native 128-bit types return their own type.
+This operation is subject to the mixed sign rules discussed xref:uint256.adoc#u256_operator_behavior[above].
+
+[#u256_math_operators]
+== Arithmetic Operators
+
+=== Unary Plus and Minus
+
+[source, c++]
+----
+BOOST_INT256_HOST_DEVICE constexpr uint256 operator+(const uint256& value) noexcept;
+BOOST_INT256_HOST_DEVICE constexpr uint256 operator-(const uint256& value) noexcept;
+----
+
+Unary `operator+` returns `value` unchanged.
+Unary `operator-` returns the two's-complement negation of `value` (equivalent to `0 - value`), wrapping modulo `2^256^`.
+
+=== abs
+
+[source, c++]
+----
+BOOST_INT256_HOST_DEVICE constexpr uint256 abs(const uint256& value) noexcept;
+----
+
+Returns `value` unchanged. It exists so that generic code, and code written against the planned signed `int256`, can call `abs` on either type.
+
+=== Addition
+
+[source, c++]
+----
+BOOST_INT256_HOST_DEVICE constexpr uint256 operator+(const uint256& lhs, const uint256& rhs) noexcept;
+
+template <BOOST_INT256_SIGNED_INTEGER_CONCEPT SignedInteger>
+BOOST_INT256_HOST_DEVICE constexpr uint256 operator+(const uint256& lhs, const SignedInteger rhs) noexcept;
+
+template <BOOST_INT256_SIGNED_INTEGER_CONCEPT SignedInteger>
+BOOST_INT256_HOST_DEVICE constexpr uint256 operator+(const SignedInteger lhs, const uint256& rhs) noexcept;
+
+template <BOOST_INT256_UNSIGNED_INTEGER_CONCEPT UnsignedInteger>
+BOOST_INT256_HOST_DEVICE constexpr uint256 operator+(const uint256& lhs, const UnsignedInteger rhs) noexcept;
+
+template <BOOST_INT256_UNSIGNED_INTEGER_CONCEPT UnsignedInteger>
+BOOST_INT256_HOST_DEVICE constexpr uint256 operator+(const UnsignedInteger lhs, const uint256& rhs) noexcept;
+
+// And, where the compiler provides them, the four builtin 128-bit flavors
+#if defined(BOOST_INT256_HAS_INT128) || defined(BOOST_INT256_HAS_MSVC_INT128)
+BOOST_INT256_HOST_DEVICE BOOST_INT256_BUILTIN_CONSTEXPR uint256 operator+(const uint256& lhs, const detail::builtin_u128 rhs) noexcept;
+BOOST_INT256_HOST_DEVICE BOOST_INT256_BUILTIN_CONSTEXPR uint256 operator+(const detail::builtin_u128 lhs, const uint256& rhs) noexcept;
+BOOST_INT256_HOST_DEVICE BOOST_INT256_BUILTIN_CONSTEXPR uint256 operator+(const uint256& lhs, const detail::builtin_i128 rhs) noexcept;
+BOOST_INT256_HOST_DEVICE BOOST_INT256_BUILTIN_CONSTEXPR uint256 operator+(const detail::builtin_i128 lhs, const uint256& rhs) noexcept;
+#endif
+----
+
+Returns as a `uint256` the sum of `lhs` and `rhs`.
+If the sum is greater than is representable by a `uint256`, the operation silently wraps in the direction of 0.
+This operation is subject to the mixed sign rules discussed xref:uint256.adoc#u256_operator_behavior[above].
+A floating-point right or left operand is also accepted, in which case the result follows xref:mixed_type_ops.adoc#mixed_ops_floating_point[Operations With Floating-Point Types].
+
+=== Subtraction
+
+[source, c++]
+----
+BOOST_INT256_HOST_DEVICE constexpr uint256 operator-(const uint256& lhs, const uint256& rhs) noexcept;
+
+template <BOOST_INT256_SIGNED_INTEGER_CONCEPT SignedInteger>
+BOOST_INT256_HOST_DEVICE constexpr uint256 operator-(const uint256& lhs, const SignedInteger rhs) noexcept;
+
+template <BOOST_INT256_SIGNED_INTEGER_CONCEPT SignedInteger>
+BOOST_INT256_HOST_DEVICE constexpr uint256 operator-(const SignedInteger lhs, const uint256& rhs) noexcept;
+
+template <BOOST_INT256_UNSIGNED_INTEGER_CONCEPT UnsignedInteger>
+BOOST_INT256_HOST_DEVICE constexpr uint256 operator-(const uint256& lhs, const UnsignedInteger rhs) noexcept;
+
+template <BOOST_INT256_UNSIGNED_INTEGER_CONCEPT UnsignedInteger>
+BOOST_INT256_HOST_DEVICE constexpr uint256 operator-(const UnsignedInteger lhs, const uint256& rhs) noexcept;
+
+// And, where the compiler provides them, the four builtin 128-bit flavors
+#if defined(BOOST_INT256_HAS_INT128) || defined(BOOST_INT256_HAS_MSVC_INT128)
+BOOST_INT256_HOST_DEVICE BOOST_INT256_BUILTIN_CONSTEXPR uint256 operator-(const uint256& lhs, const detail::builtin_u128 rhs) noexcept;
+BOOST_INT256_HOST_DEVICE BOOST_INT256_BUILTIN_CONSTEXPR uint256 operator-(const detail::builtin_u128 lhs, const uint256& rhs) noexcept;
+BOOST_INT256_HOST_DEVICE BOOST_INT256_BUILTIN_CONSTEXPR uint256 operator-(const uint256& lhs, const detail::builtin_i128 rhs) noexcept;
+BOOST_INT256_HOST_DEVICE BOOST_INT256_BUILTIN_CONSTEXPR uint256 operator-(const detail::builtin_i128 lhs, const uint256& rhs) noexcept;
+#endif
+----
+
+Returns as a `uint256` the difference of `lhs` and `rhs`.
+If the difference is less than is representable by a `uint256`, the operation silently wraps in the direction of `BOOST_INT256_UINT256_MAX`.
+This operation is subject to the mixed sign rules discussed xref:uint256.adoc#u256_operator_behavior[above].
+A floating-point right or left operand is also accepted, in which case the result follows xref:mixed_type_ops.adoc#mixed_ops_floating_point[Operations With Floating-Point Types].
+
+=== Multiplication
+
+[source, c++]
+----
+BOOST_INT256_HOST_DEVICE constexpr uint256 operator*(const uint256& lhs, const uint256& rhs) noexcept;
+
+template <BOOST_INT256_SIGNED_INTEGER_CONCEPT SignedInteger>
+BOOST_INT256_HOST_DEVICE constexpr uint256 operator*(const uint256& lhs, const SignedInteger rhs) noexcept;
+
+template <BOOST_INT256_SIGNED_INTEGER_CONCEPT SignedInteger>
+BOOST_INT256_HOST_DEVICE constexpr uint256 operator*(const SignedInteger lhs, const uint256& rhs) noexcept;
+
+template <BOOST_INT256_UNSIGNED_INTEGER_CONCEPT UnsignedInteger>
+BOOST_INT256_HOST_DEVICE constexpr uint256 operator*(const uint256& lhs, const UnsignedInteger rhs) noexcept;
+
+template <BOOST_INT256_UNSIGNED_INTEGER_CONCEPT UnsignedInteger>
+BOOST_INT256_HOST_DEVICE constexpr uint256 operator*(const UnsignedInteger lhs, const uint256& rhs) noexcept;
+
+// And, where the compiler provides them, the four builtin 128-bit flavors
+#if defined(BOOST_INT256_HAS_INT128) || defined(BOOST_INT256_HAS_MSVC_INT128)
+BOOST_INT256_HOST_DEVICE BOOST_INT256_BUILTIN_CONSTEXPR uint256 operator*(const uint256& lhs, const detail::builtin_u128 rhs) noexcept;
+BOOST_INT256_HOST_DEVICE BOOST_INT256_BUILTIN_CONSTEXPR uint256 operator*(const detail::builtin_u128 lhs, const uint256& rhs) noexcept;
+BOOST_INT256_HOST_DEVICE BOOST_INT256_BUILTIN_CONSTEXPR uint256 operator*(const uint256& lhs, const detail::builtin_i128 rhs) noexcept;
+BOOST_INT256_HOST_DEVICE BOOST_INT256_BUILTIN_CONSTEXPR uint256 operator*(const detail::builtin_i128 lhs, const uint256& rhs) noexcept;
+#endif
+----
+
+Returns as a `uint256` the product of `lhs` and `rhs`.
+If the product is greater than is representable by a `uint256`, the operation silently wraps in the direction of 0.
+The exact product of two values that each fit in 128 bits always fits, which is the case this type exists for.
+This operation is subject to the mixed sign rules discussed xref:uint256.adoc#u256_operator_behavior[above].
+A floating-point right or left operand is also accepted, in which case the result follows xref:mixed_type_ops.adoc#mixed_ops_floating_point[Operations With Floating-Point Types].
+
+=== Division
+
+[source, c++]
+----
+BOOST_INT256_HOST_DEVICE constexpr uint256 operator/(const uint256& lhs, const uint256& rhs) noexcept;
+
+template <BOOST_INT256_SIGNED_INTEGER_CONCEPT SignedInteger>
+BOOST_INT256_HOST_DEVICE constexpr uint256 operator/(const uint256& lhs, const SignedInteger rhs) noexcept;
+
+template <BOOST_INT256_SIGNED_INTEGER_CONCEPT SignedInteger>
+BOOST_INT256_HOST_DEVICE constexpr uint256 operator/(const SignedInteger lhs, const uint256& rhs) noexcept;
+
+template <BOOST_INT256_UNSIGNED_INTEGER_CONCEPT UnsignedInteger>
+BOOST_INT256_HOST_DEVICE constexpr uint256 operator/(const uint256& lhs, const UnsignedInteger rhs) noexcept;
+
+template <BOOST_INT256_UNSIGNED_INTEGER_CONCEPT UnsignedInteger>
+BOOST_INT256_HOST_DEVICE constexpr uint256 operator/(const UnsignedInteger lhs, const uint256& rhs) noexcept;
+
+// And, where the compiler provides them, the four builtin 128-bit flavors
+#if defined(BOOST_INT256_HAS_INT128) || defined(BOOST_INT256_HAS_MSVC_INT128)
+BOOST_INT256_HOST_DEVICE BOOST_INT256_BUILTIN_CONSTEXPR uint256 operator/(const uint256& lhs, const detail::builtin_u128 rhs) noexcept;
+BOOST_INT256_HOST_DEVICE BOOST_INT256_BUILTIN_CONSTEXPR uint256 operator/(const detail::builtin_u128 lhs, const uint256& rhs) noexcept;
+BOOST_INT256_HOST_DEVICE BOOST_INT256_BUILTIN_CONSTEXPR uint256 operator/(const uint256& lhs, const detail::builtin_i128 rhs) noexcept;
+BOOST_INT256_HOST_DEVICE BOOST_INT256_BUILTIN_CONSTEXPR uint256 operator/(const detail::builtin_i128 lhs, const uint256& rhs) noexcept;
+#endif
+----
+
+Returns as a `uint256` the quotient of `lhs` and `rhs` without exception.
+The quotient is truncated, so it is the same value `operator/` produces for a built-in unsigned type. See xref:numeric.adoc#int_div[Integer Division] for the other rounding modes, and xref:cstdlib.adoc[`div`] for the quotient and remainder from one division.
+Division by zero is undefined behavior, exactly as for the built-in integer types: the library adds no zero-divisor check, and a zero divisor seen during constant evaluation is a hard compile-time error.
+This operation is subject to the mixed sign rules discussed xref:uint256.adoc#u256_operator_behavior[above].
+A floating-point right or left operand is also accepted, in which case the result follows xref:mixed_type_ops.adoc#mixed_ops_floating_point[Operations With Floating-Point Types].
+
+=== Modulo
+
+[source, c++]
+----
+BOOST_INT256_HOST_DEVICE constexpr uint256 operator%(const uint256& lhs, const uint256& rhs) noexcept;
+
+template <BOOST_INT256_SIGNED_INTEGER_CONCEPT SignedInteger>
+BOOST_INT256_HOST_DEVICE constexpr uint256 operator%(const uint256& lhs, const SignedInteger rhs) noexcept;
+
+template <BOOST_INT256_SIGNED_INTEGER_CONCEPT SignedInteger>
+BOOST_INT256_HOST_DEVICE constexpr uint256 operator%(const SignedInteger lhs, const uint256& rhs) noexcept;
+
+template <BOOST_INT256_UNSIGNED_INTEGER_CONCEPT UnsignedInteger>
+BOOST_INT256_HOST_DEVICE constexpr uint256 operator%(const uint256& lhs, const UnsignedInteger rhs) noexcept;
+
+template <BOOST_INT256_UNSIGNED_INTEGER_CONCEPT UnsignedInteger>
+BOOST_INT256_HOST_DEVICE constexpr uint256 operator%(const UnsignedInteger lhs, const uint256& rhs) noexcept;
+
+// And, where the compiler provides them, the four builtin 128-bit flavors
+#if defined(BOOST_INT256_HAS_INT128) || defined(BOOST_INT256_HAS_MSVC_INT128)
+BOOST_INT256_HOST_DEVICE BOOST_INT256_BUILTIN_CONSTEXPR uint256 operator%(const uint256& lhs, const detail::builtin_u128 rhs) noexcept;
+BOOST_INT256_HOST_DEVICE BOOST_INT256_BUILTIN_CONSTEXPR uint256 operator%(const detail::builtin_u128 lhs, const uint256& rhs) noexcept;
+BOOST_INT256_HOST_DEVICE BOOST_INT256_BUILTIN_CONSTEXPR uint256 operator%(const uint256& lhs, const detail::builtin_i128 rhs) noexcept;
+BOOST_INT256_HOST_DEVICE BOOST_INT256_BUILTIN_CONSTEXPR uint256 operator%(const detail::builtin_i128 lhs, const uint256& rhs) noexcept;
+#endif
+----
+
+Returns as a `uint256` the remainder of `lhs` and `rhs` without exception.
+Remainder by zero is undefined behavior, exactly as for the built-in integer types: the library adds no zero-divisor check, and a zero divisor seen during constant evaluation is a hard compile-time error.
+This operator is only defined for integers, matching the built-in types: a floating-point operand is rejected.
+This operation is subject to the mixed sign rules discussed xref:uint256.adoc#u256_operator_behavior[above].
+
+=== Compound Assignment
+
+[source, c++]
+----
+struct uint256
+{
+    ...
+
+    // For each of |= &= ^= <<= >>= += -= *= /= %=
+    template <BOOST_INT256_INTEGER_CONCEPT Integer>
+    BOOST_INT256_HOST_DEVICE constexpr uint256& operator+=(Integer rhs) noexcept;
+
+    BOOST_INT256_HOST_DEVICE constexpr uint256& operator+=(const uint256& rhs) noexcept;
+
+    // The floating-point forms are defined for += -= *= /= and deleted for the rest
+    template <BOOST_INT256_FLOATING_POINT_CONCEPT Float>
+    BOOST_INT256_HOST_DEVICE constexpr uint256& operator+=(Float rhs) noexcept;
+
+    // Increment and decrement
+    BOOST_INT256_HOST_DEVICE constexpr uint256& operator++() noexcept;
+    BOOST_INT256_HOST_DEVICE constexpr uint256 operator++(int) noexcept;
+    BOOST_INT256_HOST_DEVICE constexpr uint256& operator--() noexcept;
+    BOOST_INT256_HOST_DEVICE constexpr uint256 operator--(int) noexcept;
+};
+----
+
+Every compound assignment operator is `*this = *this op rhs`, so it inherits the behavior of the corresponding binary operator.
+A floating-point right operand converts the value to that type, applies the operation, and converts the result back, which is what the built-in types do; `%=`, `&=`, `|=`, `pass:[^=]`, `pass:[<<=]` and `pass:[>>=]` with a floating-point operand are declared deleted rather than left to the implicit conversions.
+The same operators are also available with a built-in integer on the left and a `uint256` on the right; see xref:mixed_type_ops.adoc#mixed_ops_integer_compound[Compound Assignment onto a Built-in Integer].
+
+[#u256_limits]
+== `<limits>` Support and Values
+
+A full specialization of `std::numeric_limits<uint256>` is provided.
+It is defined in xref:api_reference.adoc#api_structs[`<boost/int256/limits.hpp>`] and is also included by the umbrella header `<boost/int256.hpp>`.
+The member values match those of a built-in unsigned 256-bit integer.
+
+[source, c++]
+----
+#include <boost/int256/limits.hpp>
+
+namespace std {
+
+template <>
+class numeric_limits<boost::int256::uint256>;
+
+} // namespace std
+----
+
+=== Member Functions
+
+Each function is `static constexpr` and returns a `uint256`.
+
+[cols="1,2", options="header"]
+|===
+| Function | Value
+
+| `(min)()`
+| `0`
+
+| `lowest()`
+| `0`
+
+| `(max)()`
+| `115792089237316195423570985008687907853269984665640564039457584007913129639935` (`2^256^ - 1`)
+
+| `epsilon()`
+| `0`
+
+| `round_error()`
+| `0`
+
+| `infinity()`
+| `0`
+
+| `quiet_NaN()`
+| `0`
+
+| `signaling_NaN()`
+| `0`
+
+| `denorm_min()`
+| `0`
+|===
+
+NOTE: Wrap `min` and `max` in parentheses at the call site, as `(std::numeric_limits<uint256>::min)()`, so the call is not intercepted by the `min`/`max` function-like macros that some platform headers define.
+
+=== Member Constants
+
+[cols="1,2", options="header"]
+|===
+| Constant | Value
+
+| `is_specialized`
+| `true`
+
+| `is_signed`
+| `false`
+
+| `is_integer`
+| `true`
+
+| `is_exact`
+| `true`
+
+| `is_bounded`
+| `true`
+
+| `is_modulo`
+| `true`
+
+| `is_iec559`
+| `false`
+
+| `has_infinity`
+| `false`
+
+| `has_quiet_NaN`
+| `false`
+
+| `has_signaling_NaN`
+| `false`
+
+| `has_denorm`
+| `std::denorm_absent`
+
+| `has_denorm_loss`
+| `false`
+
+| `round_style`
+| `std::round_toward_zero`
+
+| `digits`
+| `256`
+
+| `digits10`
+| `77`
+
+| `max_digits10`
+| `0`
+
+| `radix`
+| `2`
+
+| `min_exponent`
+| `0`
+
+| `min_exponent10`
+| `0`
+
+| `max_exponent`
+| `0`
+
+| `max_exponent10`
+| `0`
+
+| `traps`
+| `std::numeric_limits<std::uint64_t>::traps`
+
+| `tinyness_before`
+| `false`
+|===
+
+`digits10` is 77 because 10^77^ is the largest power of ten the type can hold, while the maximum itself is 78 decimal digits long.
+
+The equivalent C-style constant macro is available in xref:api_reference.adoc#api_macro_literals[`<boost/int256/climits.hpp>`]: `BOOST_INT256_UINT256_MAX`.

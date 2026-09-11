@@ -1,0 +1,139 @@
+////
+Copyright 2026 Matt Borland
+Distributed under the Boost Software License, Version 1.0.
+https://www.boost.org/LICENSE_1_0.txt
+////
+
+[#pretty_printer]
+= Pretty Printers
+:idprefix: pretty_printers_
+
+Pretty printers allow debuggers to display a `uint256` in human-readable form instead of showing the four raw words.
+The library contains pretty printers for LLDB, GDB, and Visual Studio in the `extra/` folder.
+
+[#printer_lldb]
+== LLDB
+
+To use this, add the following line to your `~/.lldbinit` file:
+
+[source]
+----
+command script import /path/to/int256/extra/int256_printer_lldb.py
+----
+
+If this is successful, you should see the following message in your debugger upon startup:
+
+`"uint256 pretty printer loaded successfully"`
+
+A value is shown as the decimal number with digit grouping, followed by the full 64-digit hexadecimal form, and the four words remain available as children:
+
+[source]
+----
+(lldb) frame variable x
+(const boost::int256::uint256) x = 514,631,507,721,405,312,519,378,913,364,952,599,460,579,264,246,569,804,738,786,927,427,030,286,080 (0x0123456789abcdeffedcba9876543210112233445566778899aabbccddeeff00) {
+  [0] = 11072869122414935808
+  [1] = 1234605616436508552
+  [2] = 18364758544493064720
+  [3] = 81985529216486895
+}
+(lldb) frame variable small
+(const boost::int256::uint256) small = 42 (0x000000000000000000000000000000000000000000000000000000000000002a) {
+  [0] = 42
+  [1] = 0
+  [2] = 0
+  [3] = 0
+}
+----
+
+[#printer_gdb]
+== GDB
+
+To load the pretty printer, add the following line to your `.gdbinit`:
+
+[source]
+----
+source /path/to/int256/extra/int256_printer_gdb.py
+----
+
+or you can source it manually in GDB.
+
+[source]
+----
+(gdb) source /path/to/int256/extra/int256_printer_gdb.py
+----
+
+The display format is the same as for LLDB: the grouped decimal value, the 64-digit hexadecimal value in parentheses, and `words[0]` through `words[3]` as children.
+
+[#printer_natvis]
+== Visual Studio (NATVIS)
+
+The `extra/int256.natvis` file provides visualization for the Visual Studio debugger.
+There are several ways to register it:
+
+=== Per-Project
+
+Add the `.natvis` file to your Visual Studio project.
+In Solution Explorer, right-click the project, select **Add > Existing Item**, and choose `int256.natvis`.
+Visual Studio will automatically use it when debugging that project.
+
+=== Per-User (All Projects)
+
+Copy `int256.natvis` to your per-user Visualizers directory:
+
+[source]
+----
+%USERPROFILE%\Documents\Visual Studio 2022\Visualizers\
+----
+
+Replace `2022` with your Visual Studio version.
+All projects debugged with that installation will use the visualizer.
+
+=== CMake Projects
+
+Add the `.natvis` file as a source file in your `CMakeLists.txt`:
+
+[source,cmake]
+----
+target_sources(my_target PRIVATE /path/to/int256/extra/int256.natvis)
+----
+
+=== Display Format
+
+Values that fit in 64 bits are displayed in decimal.
+Larger values are displayed as a synthesized hexadecimal value, most significant word first, with every nibble present.
+
+[cols="1,2", options="header"]
+|===
+| Value | Display
+
+| `42`
+| `42`
+
+| `2^64 + 1`
+| `0x0000000000000000000000000000000000000000000000010000000000000001`
+
+| `uint256_max`
+| `0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF`
+|===
+
+The four words are also expandable, most significant first.
+
+NOTE: Full decimal display for values beyond 64 bits is not possible in plain NATVIS.
+The NATVIS expression evaluator does not support 256-bit arithmetic, so values that exceed the 64-bit range are shown in hexadecimal.
+
+=== MSVC Debugger Add-In
+
+For a full decimal display of any value, `extra/` also carries a native debugger add-in: `int256_printer_msvc.cpp` builds a small DLL that formats a `uint256` by calling the library's own `detail::mini_to_chars`, and `int256_printer_msvc.natvis` points the debugger at it.
+
+Build the DLL with the supplied batch file from a directory where the compiler can find the library headers:
+
+[source]
+----
+cd extra
+int256_printer_msvc.bat
+----
+
+Then register `int256_printer_msvc.natvis` the same way as `int256.natvis`, and keep `int256_printer_msvc.dll` next to it.
+The add-in exports two formatters, `formatter_u256_dec` and `formatter_u256_hex`, which the `.natvis` selects with the `dec` and `hex` display views, so `x,view(hex)` in a watch window switches base.
+
+NOTE: The add-in uses the `LegacyAddin` NATVIS mechanism, which is supported on x64 and x86 only. Use the plain `int256.natvis` on ARM64.

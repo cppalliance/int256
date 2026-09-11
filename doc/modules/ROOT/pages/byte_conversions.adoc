@@ -1,0 +1,282 @@
+////
+Copyright 2026 Matt Borland
+Distributed under the Boost Software License, Version 1.0.
+https://www.boost.org/LICENSE_1_0.txt
+////
+
+[#byte_conversions]
+= Byte Order Conversions
+:idprefix: byte_conversions_
+
+[source,c++]
+----
+#include <boost/int256/byte_conversions.hpp>
+----
+
+The library provides functions for converting `uint256` to and from big-endian or little-endian byte order, which is what serializing a 256-bit value into a file format, a network packet, or a database column requires, and what reading a 256-bit hash back as an integer requires.
+
+All of these functions are `constexpr`, and are available using pass:[C++14] like the rest of the library.
+
+There are two families:
+
+* `to_be` / `from_be` / `to_le` / `from_le` operate on whole values. The result of `to_be` and `to_le` is a value whose *object representation* is in the requested order, so it is meant to be written out (or `memcpy`-ed) rather than read as a number.
+* `to_*_bytes` / `from_*_bytes` operate on 32-byte arrays. Apart from the `ne` pair these never depend on the host byte order, so `to_be_bytes` returns the most significant byte first on every platform.
+
+The byte arrays are built with shifts rather than from the object representation, so the byte-array functions give identical results on little-endian and big-endian hosts.
+
+== Semantics on a Big-Endian Host
+
+`uint256` stores its four words in a fixed order, with `words[0]` least significant, on every platform (see xref:uint256.adoc#u256_layout[Layout and Alignment]).
+On a big-endian host the object representation is therefore mixed-endian: the bytes inside each word are big-endian, while the words themselves ascend from least significant. That has three consequences, all of which the test suite asserts on a big-endian machine:
+
+* `to_be_bytes`, `to_le_bytes` and their `from_*` counterparts are *value encodings*. They produce and consume the same bytes for the same value on every platform.
+* `to_ne_bytes` and `from_ne_bytes` are the *object representation*, so on a big-endian host they are neither the big-endian nor the little-endian encoding. Use them only to copy a value around within one process.
+* `to_be(x)` and `to_le(x)` return a value whose object representation is the requested encoding, so `memcpy` of `to_be(x)` equals `to_be_bytes(x)` on every platform, which is what makes them usable for writing into a buffer.
+
+[#byte_conversions_element_type]
+== Byte Array Element Type
+
+The array functions are templated on the element type, which defaults to `std::uint8_t`.
+The accepted types are `char`, `signed char`, `unsigned char`, and, when the standard library provides it (pass:[C++17]), `std::byte`:
+
+[source,c++]
+----
+const auto bytes {boost::int256::to_be_bytes(value)};              // std::array<std::uint8_t, 32>
+const auto as_byte {boost::int256::to_be_bytes<std::byte>(value)}; // std::array<std::byte, 32>
+const auto as_char {boost::int256::to_be_bytes<char>(value)};      // std::array<char, 32>
+----
+
+NOTE: The number of bytes is fixed at `sizeof(uint256)`, which is 32, so the `from_*_bytes` functions do not need a length argument. The `std::array` overloads reject a mismatched size at compile time, and the pointer overloads read exactly 32 bytes from the address given. A `std::span`, `std::vector`, or any other contiguous range is passed by handing `.data()` to the pointer overload.
+
+NOTE: The `std::array` returning overloads are host only, because `std::array` is not usable from a device pass. Device code uses the raw array overloads shown below, which write into a `ByteType (&out)[32]`, and the pointer overloads of the `from_*_bytes` family.
+
+[#to_be]
+== to_be
+
+Converts a value from the native representation to big-endian byte order.
+The returned value is meant to be copied out, not read as a number.
+
+[source,c++]
+----
+namespace boost {
+namespace int256 {
+
+BOOST_INT256_HOST_DEVICE constexpr uint256 to_be(const uint256& value) noexcept;
+
+} // namespace int256
+} // namespace boost
+----
+
+[#from_be]
+== from_be
+
+Converts a value from big-endian byte order to the native representation.
+This is the inverse of `to_be`, and since the transformation is its own inverse it delegates directly to `to_be`.
+
+[source,c++]
+----
+namespace boost {
+namespace int256 {
+
+BOOST_INT256_HOST_DEVICE constexpr uint256 from_be(const uint256& value) noexcept;
+
+} // namespace int256
+} // namespace boost
+----
+
+[#to_le]
+== to_le
+
+Converts a value from the native representation to little-endian byte order.
+On a little-endian platform the value is returned unchanged.
+
+[source,c++]
+----
+namespace boost {
+namespace int256 {
+
+BOOST_INT256_HOST_DEVICE constexpr uint256 to_le(const uint256& value) noexcept;
+
+} // namespace int256
+} // namespace boost
+----
+
+[#from_le]
+== from_le
+
+Converts a value from little-endian byte order to the native representation.
+This is the inverse of `to_le`, and delegates directly to it.
+
+[source,c++]
+----
+namespace boost {
+namespace int256 {
+
+BOOST_INT256_HOST_DEVICE constexpr uint256 from_le(const uint256& value) noexcept;
+
+} // namespace int256
+} // namespace boost
+----
+
+[#to_be_bytes]
+== to_be_bytes
+
+Returns the 32 bytes of the value with the most significant byte first, on every platform.
+
+[source,c++]
+----
+namespace boost {
+namespace int256 {
+
+template <typename ByteType = std::uint8_t>
+constexpr std::array<ByteType, sizeof(uint256)> to_be_bytes(const uint256& value) noexcept;
+
+// Usable from a device pass
+template <typename ByteType>
+BOOST_INT256_HOST_DEVICE constexpr void to_be_bytes(const uint256& value, ByteType (&out)[sizeof(uint256)]) noexcept;
+
+} // namespace int256
+} // namespace boost
+----
+
+[#from_be_bytes]
+== from_be_bytes
+
+Reconstructs a value from 32 bytes in big-endian order.
+The target type is given explicitly and must be `uint256`.
+
+[source,c++]
+----
+namespace boost {
+namespace int256 {
+
+template <typename T, typename ByteType, std::size_t N>
+constexpr T from_be_bytes(const std::array<ByteType, N>& bytes) noexcept;
+
+template <typename T, typename ByteType>
+BOOST_INT256_HOST_DEVICE constexpr T from_be_bytes(const ByteType* bytes) noexcept;
+
+} // namespace int256
+} // namespace boost
+----
+
+The `std::array` overload requires `N == sizeof(T)`, and any other size is a `static_assert` failure.
+The pointer overload reads `sizeof(T)` bytes starting at `bytes`, and the caller is responsible for that many bytes being readable.
+
+[#to_le_bytes]
+== to_le_bytes
+
+Returns the 32 bytes of the value with the least significant byte first, on every platform.
+
+[source,c++]
+----
+namespace boost {
+namespace int256 {
+
+template <typename ByteType = std::uint8_t>
+constexpr std::array<ByteType, sizeof(uint256)> to_le_bytes(const uint256& value) noexcept;
+
+template <typename ByteType>
+BOOST_INT256_HOST_DEVICE constexpr void to_le_bytes(const uint256& value, ByteType (&out)[sizeof(uint256)]) noexcept;
+
+} // namespace int256
+} // namespace boost
+----
+
+[#from_le_bytes]
+== from_le_bytes
+
+Reconstructs a value from 32 bytes in little-endian order.
+The size requirements match xref:byte_conversions.adoc#from_be_bytes[`from_be_bytes`].
+
+[source,c++]
+----
+namespace boost {
+namespace int256 {
+
+template <typename T, typename ByteType, std::size_t N>
+constexpr T from_le_bytes(const std::array<ByteType, N>& bytes) noexcept;
+
+template <typename T, typename ByteType>
+BOOST_INT256_HOST_DEVICE constexpr T from_le_bytes(const ByteType* bytes) noexcept;
+
+} // namespace int256
+} // namespace boost
+----
+
+[#to_ne_bytes]
+== to_ne_bytes
+
+Returns the 32 bytes of the object representation of the value, which is what a `memcpy` of the object would produce.
+On a little-endian host this matches `to_le_bytes`; on a big-endian host it is mixed-endian, as described above, so this is the only byte-array function whose result varies across platforms.
+
+[source,c++]
+----
+namespace boost {
+namespace int256 {
+
+template <typename ByteType = std::uint8_t>
+constexpr std::array<ByteType, sizeof(uint256)> to_ne_bytes(const uint256& value) noexcept;
+
+template <typename ByteType>
+BOOST_INT256_HOST_DEVICE constexpr void to_ne_bytes(const uint256& value, ByteType (&out)[sizeof(uint256)]) noexcept;
+
+} // namespace int256
+} // namespace boost
+----
+
+[#from_ne_bytes]
+== from_ne_bytes
+
+Reconstructs a value from 32 bytes in the object representation, and is the inverse of `to_ne_bytes` on every platform.
+The size requirements match xref:byte_conversions.adoc#from_be_bytes[`from_be_bytes`].
+
+[source,c++]
+----
+namespace boost {
+namespace int256 {
+
+template <typename T, typename ByteType, std::size_t N>
+constexpr T from_ne_bytes(const std::array<ByteType, N>& bytes) noexcept;
+
+template <typename T, typename ByteType>
+BOOST_INT256_HOST_DEVICE constexpr T from_ne_bytes(const ByteType* bytes) noexcept;
+
+} // namespace int256
+} // namespace boost
+----
+
+[#byte_conversions_examples]
+== Examples
+
+.This https://github.com/cppalliance/int256/blob/develop/example/byte_conversions.cpp[example] demonstrates the byte order conversion functions
+====
+[source, c++]
+----
+include::example$byte_conversions.cpp[]
+----
+
+Output (on a little-endian host, where the `to_ne_bytes` line matches `to_le_bytes`):
+----
+=== Byte arrays ===
+to_be_bytes: 01 02 03 04 05 06 07 08 09 0a 0b 0c 0d 0e 0f 10 11 12 13 14 15 16 17 18 19 1a 1b 1c 1d 1e 1f 20
+to_le_bytes: 20 1f 1e 1d 1c 1b 1a 19 18 17 16 15 14 13 12 11 10 0f 0e 0d 0c 0b 0a 09 08 07 06 05 04 03 02 01
+to_ne_bytes: 20 1f 1e 1d 1c 1b 1a 19 18 17 16 15 14 13 12 11 10 0f 0e 0d 0c 0b 0a 09 08 07 06 05 04 03 02 01
+
+=== Reading a value back out of bytes ===
+from_be_bytes: 300
+from_le_bytes: 19903532184728499472755846345868977080796606098303847563239893857561361776640
+
+=== Whole value conversions ===
+object representation of to_be(value): 01 02 03 04 05 06 07 08 09 0a 0b 0c 0d 0e 0f 10 11 12 13 14 15 16 17 18 19 1a 1b 1c 1d 1e 1f 20
+from_be recovers: 455867356320691211509944977504407603390036387149619137164185182714736811808
+value:            455867356320691211509944977504407603390036387149619137164185182714736811808
+
+from_le_bytes over a char buffer: 455867356320691211509944977504407603390036387149619137164185182714736811808
+
+SHA-256 of the empty string as an integer:
+  decimal: 102987336249554097029535212322581322789799900648198034993379397001115665086549
+  hex:     e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+  mod 10^9 + 7: 353860983
+----
+====

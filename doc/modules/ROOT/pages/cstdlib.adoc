@@ -1,0 +1,59 @@
+////
+Copyright 2026 Matt Borland
+Distributed under the Boost Software License, Version 1.0.
+https://www.boost.org/LICENSE_1_0.txt
+////
+
+[#cstdlib]
+= `<cstdlib>`
+:idprefix: cstdlib_
+
+From the `<cstdlib>` header we support a function and a structure that are analogous to https://en.cppreference.com/w/cpp/numeric/math/div[`std::div`].
+These are of particular importance with this library since, unlike a hardware type, the compiler cannot fold a division followed by a modulo of the same operands into one operation.
+The division algorithm naturally produces both, so it costs nearly nothing above a division or a modulo to get both results.
+
+[source, c++]
+----
+#include <boost/int256/cstdlib.hpp>
+----
+
+[#div_structs]
+== Structures
+
+[source, c++]
+----
+namespace boost {
+namespace int256 {
+
+struct u256div_t
+{
+    uint256 quot;
+    uint256 rem;
+};
+
+} // namespace int256
+} // namespace boost
+----
+
+[#div_source]
+== div
+
+Using the structure defined above, the `div` function computes both quotient and remainder simultaneously:
+
+[source, c++]
+----
+namespace boost {
+namespace int256 {
+
+BOOST_INT256_HOST_DEVICE constexpr u256div_t div(const uint256& x, const uint256& y) noexcept;
+
+} // namespace int256
+} // namespace boost
+----
+
+For any non-zero divisor the `quot` and `rem` values are the same as if you performed the division and the modulo separately, so `quot * y + rem == x` always holds and `rem < y`.
+
+Division by zero is undefined behavior, exactly as it is for `operator/` and `operator%` and for the built-in integer types.
+The library performs no zero-divisor check, and a zero divisor seen during constant evaluation is a hard compile-time error.
+
+See the xref:examples.adoc#examples_cstdlib[div example] for a program that uses it, including a divisor wide enough to take the general division path.

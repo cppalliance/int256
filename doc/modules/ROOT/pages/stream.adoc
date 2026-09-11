@@ -1,0 +1,54 @@
+////
+Copyright 2026 Matt Borland
+Distributed under the Boost Software License, Version 1.0.
+https://www.boost.org/LICENSE_1_0.txt
+////
+
+[#stream]
+= `<iostream>` Support
+:idprefix: stream_
+
+The following stream operators are available and work similarly to the built-in integer types.
+
+[source, c++]
+----
+#include <boost/int256/iostream.hpp>
+----
+
+[source, c++]
+----
+namespace boost {
+namespace int256 {
+
+template <typename charT, typename traits>
+std::basic_ostream<charT, traits>& operator<<(std::basic_ostream<charT, traits>& os, const uint256& v);
+
+template <typename charT, typename traits>
+std::basic_istream<charT, traits>& operator>>(std::basic_istream<charT, traits>& is, uint256& v);
+
+} // namespace int256
+} // namespace boost
+----
+
+These are host-only functions: they are not annotated with `BOOST_INT256_HOST_DEVICE` and are not available in device code.
+
+== Flags
+
+[#ios]
+The following flags from `<ios>` are honored.
+The base flags (`std::oct`, `std::dec`, `std::hex`) affect both input and output; the remaining flags affect output only.
+
+- `std::oct` - Octal numbers (input and output)
+- `std::dec` - Decimal numbers (input and output)
+- `std::hex` - Hexadecimal numbers (input and output)
+- `std::uppercase` - Uppercase hexadecimal digits on output (e.g. FFFF)
+- `std::nouppercase` - Lowercase hexadecimal digits on output (e.g. ffff)
+- `std::showbase` - Adds a leading base prefix for hex or oct numbers on output (e.g. 0xffff)
+- `std::noshowbase` - Omits the leading base prefix on output (e.g. ffff)
+
+The width and fill manipulators (`std::setw`, `std::setfill`, `std::left`, `std::right`, `std::internal`) apply to the number as a whole, and the internal buffer is sized for the longest possible output, which is 256 characters in base 2.
+
+On extraction (`operator>>`) a leading `0x` or `0` base prefix is accepted and consumed for the active base regardless of `showbase`, and hexadecimal input is parsed case-insensitively.
+A value that does not fit in a `uint256` sets `failbit`.
+
+See the xref:examples.adoc#examples_io[IO streaming example] for usage demonstrations.

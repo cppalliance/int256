@@ -1,0 +1,148 @@
+////
+Copyright 2026 Matt Borland
+Distributed under the Boost Software License, Version 1.0.
+https://www.boost.org/LICENSE_1_0.txt
+////
+
+[#getting_started]
+= Getting Started
+:idprefix: gs_
+
+Boost.Int256 is header-only.
+The core type and functions have no required dependencies, so in most cases it is enough to add the library's `include` directory to your compiler's search path and include the umbrella header:
+
+[source, c++]
+----
+#include <boost/int256.hpp>
+----
+
+The umbrella header pulls in the type and every feature that has no external dependency.
+The optional integration headers (xref:charconv.adoc[`charconv.hpp`], `random.hpp`, and the pass:[{fmt}] support in xref:format.adoc[`fmt_format.hpp`]) are not included by the umbrella and must be included explicitly.
+See xref:file_structure.adoc[File Structure] for the full header list.
+
+== B2
+
+Run the following commands to clone the latest version of Boost, prepare the Boost.Build system, and build with pass:[C++14] as the default standard:
+
+[source, bash]
+----
+git clone https://github.com/boostorg/boost
+cd boost
+git submodule update --init
+./bootstrap
+./b2 cxxstd=14
+----
+
+To install the headers system-wide, run:
+
+[source, bash]
+----
+sudo ./b2 install cxxstd=14
+----
+
+The value of `cxxstd` must be at least 14. https://www.boost.org/doc/libs/release/tools/build/doc/html/index.html[See the b2 documentation] under `cxxstd` for all valid values.
+
+== CMake
+
+Boost.Int256 ships a CMake package and the `Boost::int256` target. When building against a Boost tree that contains this library, request it and link the interface target:
+
+[source, cmake]
+----
+cmake .. -DBOOST_INCLUDE_LIBRARIES="int256"
+----
+
+[source, cmake]
+----
+target_link_libraries(my_target PRIVATE Boost::int256)
+----
+
+The library can also be consumed on its own with `FetchContent`:
+
+[source, cmake]
+----
+include(FetchContent)
+FetchContent_Declare(
+    int256
+    GIT_REPOSITORY https://github.com/cppalliance/int256
+    GIT_TAG        develop
+)
+FetchContent_MakeAvailable(int256)
+
+target_link_libraries(my_target PRIVATE Boost::int256)
+----
+
+== vcpkg
+
+The repository contains a port under `ports/int256`, so the library can be consumed as an overlay port:
+
+[source, bash]
+----
+vcpkg install int256 --overlay-ports=/path/to/int256/ports
+----
+
+== pass:[C++20] Module
+
+When compiling with pass:[C++20] or newer, the library can be consumed as a named module instead of via header inclusion:
+
+[source, c++]
+----
+import boost.int256;
+----
+
+Building the module requires defining `BOOST_INT256_BUILD_MODULE` and compiling `module/int256.cppm` with your toolchain's module support. See xref:config.adoc[Configuration Macros] for details.
+
+== CUDA Support
+
+The library type and many of the functions can run on both host and device under CUDA. Compile with a CUDA-aware toolchain and define `BOOST_INT256_ENABLE_CUDA`. Functions carrying `BOOST_INT256_HOST_DEVICE` in their signature run on both host and device; all others run on host only. See xref:config.adoc[Configuration Macros].
+
+== SYCL Support
+
+The library type and many of the functions can also run on the device under SYCL (for example Intel oneAPI `icpx -fsycl`). SYCL device support is opt-in: include `<sycl/sycl.hpp>` before any Boost.Int256 header and define `BOOST_INT256_ENABLE_SYCL`. Functions carrying `BOOST_INT256_HOST_DEVICE` in their signature run on both host and device; all others run on host only. The `boost::charconv::to_chars` / `from_chars` overloads from `<boost/int256/charconv.hpp>` also run on the SYCL device (Boost.Charconv provides SYCL support, and defining `BOOST_INT256_ENABLE_SYCL` enables it automatically). See xref:config.adoc[Configuration Macros].
+
+== Dependencies
+
+The core library (everything included by `<boost/int256.hpp>`) has no required dependencies and needs only a conforming pass:[C++14] compiler.
+Nothing in `include/boost/int256/` includes a header from another Boost library except in the two optional integrations below, where the include is guarded by `pass:[__has_include]`.
+The optional integration headers depend on the following, and are only usable when those components are available:
+
+* xref:charconv.adoc[`<boost/int256/charconv.hpp>`] requires https://www.boost.org/doc/libs/release/libs/charconv/doc/html/charconv.html[Boost.Charconv].
+* xref:random.adoc[`<boost/int256/random.hpp>`] requires https://www.boost.org/doc/libs/release/libs/random/[Boost.Random].
+* xref:format.adoc[`<boost/int256/fmt_format.hpp>`] requires the https://github.com/fmtlib/fmt[pass:[{fmt}]] library.
+
+== Hello World
+
+Nothing beyond the include path is required to start using the type.
+This program adds two values whose sum does not fit in 128 bits, and prints the result:
+
+.This https://github.com/cppalliance/int256/blob/develop/example/hello_world.cpp[example] demonstrates including the library and printing a value that no built-in integer type can hold.
+====
+[source, c++]
+----
+include::example$hello_world.cpp[]
+----
+
+Output:
+----
+340282366920938463463374607431768211456 + 42 = 340282366920938463463374607431768211498
+----
+====
+
+Because the library is header-only, a single command compiles and runs it. Substitute the path to your Boost installation for `/path/to/boost`:
+
+.Linux
+[source, bash]
+----
+g++ -std=c++14 -I /path/to/boost hello_world.cpp -o hello_world && ./hello_world
+----
+
+.macOS
+[source, bash]
+----
+clang++ -std=c++14 -I /path/to/boost hello_world.cpp -o hello_world && ./hello_world
+----
+
+.Windows
+[source, batch]
+----
+cl /EHsc /std:c++14 /I C:\path\to\boost hello_world.cpp && hello_world.exe
+----

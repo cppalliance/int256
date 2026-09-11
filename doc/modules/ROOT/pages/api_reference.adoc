@@ -1,0 +1,542 @@
+////
+Copyright 2026 Matt Borland
+Distributed under the Boost Software License, Version 1.0.
+https://www.boost.org/LICENSE_1_0.txt
+////
+
+[#api_reference]
+= API Reference
+:idprefix: api_ref_
+
+[#api_namespaces]
+== Namespaces
+
+[cols="1,2", options="header"]
+|===
+| Namespace | Description
+
+| `boost::int256`
+| Contains all components of the library except `<charconv>` functionality
+
+| xref:literals.adoc[`boost::int256::literals`]
+| User-defined literals for 256-bit integers
+
+| xref:charconv.adoc[`boost::charconv`]
+| `to_chars` and `from_chars` overloads for 256-bit integers (requires Boost.Charconv)
+
+|===
+
+[#api_types]
+== Types
+
+[cols="1,2", options="header"]
+|===
+| Type | Description
+
+| xref:uint256.adoc[`uint256`]
+| Unsigned 256-bit integer
+|===
+
+A signed `int256` is planned for a following release.
+
+[#api_literals]
+== Literals
+
+[cols="1,2", options="header"]
+|===
+| Literal | Description
+
+| xref:literals.adoc[`_u256`]
+| Unsigned 256-bit literal (lowercase)
+
+| xref:literals.adoc[`_U256`]
+| Unsigned 256-bit literal (uppercase)
+|===
+
+[#api_structs]
+== Structures
+
+[cols="1,2", options="header"]
+|===
+| Structure | Description
+
+| https://en.cppreference.com/w/cpp/types/numeric_limits[`std::numeric_limits<uint256>`]
+| Numeric limits specialization for `uint256`
+
+| xref:hash.adoc[`std::hash<uint256>`]
+| Hash specialization for `uint256`
+
+| xref:cstdlib.adoc#div_structs[`u256div_t`]
+| Result type for `div(uint256, uint256)`
+
+| xref:numeric.adoc#div_result[`div_result<T>`]
+| Result type for the `div_rem_*` functions
+|===
+
+[#api_functions]
+== Functions
+
+Listed by analogous STL header.
+
+[#api_bit]
+=== xref:bit.adoc[`<bit>`]
+
+[cols="1,2", options="header"]
+|===
+| Function | Description
+
+| xref:bit.adoc#has_single_bit[`has_single_bit`]
+| Checks if value is a power of two
+
+| xref:bit.adoc#countl_zero[`countl_zero`]
+| Counts leading zeros
+
+| xref:bit.adoc#countl_one[`countl_one`]
+| Counts leading ones
+
+| xref:bit.adoc#bit_width[`bit_width`]
+| Returns minimum bits needed to represent value
+
+| xref:bit.adoc#bit_ceil[`bit_ceil`]
+| Rounds up to nearest power of two
+
+| xref:bit.adoc#bit_floor[`bit_floor`]
+| Rounds down to nearest power of two
+
+| xref:bit.adoc#countr_zero[`countr_zero`]
+| Counts trailing zeros
+
+| xref:bit.adoc#countr_one[`countr_one`]
+| Counts trailing ones
+
+| xref:bit.adoc#rotl[`rotl`]
+| Rotates bits left
+
+| xref:bit.adoc#rotr[`rotr`]
+| Rotates bits right
+
+| xref:bit.adoc#popcount[`popcount`]
+| Counts number of set bits
+
+| xref:bit.adoc#byteswap[`byteswap`]
+| Reverses byte order
+|===
+
+[#api_byte_conversions]
+=== xref:byte_conversions.adoc[Byte Order Conversions]
+
+[cols="1,2", options="header"]
+|===
+| Function | Description
+
+| xref:byte_conversions.adoc#to_be[`to_be`]
+| Converts a value from native to big-endian byte order
+
+| xref:byte_conversions.adoc#from_be[`from_be`]
+| Converts a value from big-endian to native byte order
+
+| xref:byte_conversions.adoc#to_le[`to_le`]
+| Converts a value from native to little-endian byte order
+
+| xref:byte_conversions.adoc#from_le[`from_le`]
+| Converts a value from little-endian to native byte order
+
+| xref:byte_conversions.adoc#to_be_bytes[`to_be_bytes`]
+| Returns the 32 bytes of a value, most significant first
+
+| xref:byte_conversions.adoc#from_be_bytes[`from_be_bytes`]
+| Reconstructs a value from big-endian ordered bytes
+
+| xref:byte_conversions.adoc#to_le_bytes[`to_le_bytes`]
+| Returns the 32 bytes of a value, least significant first
+
+| xref:byte_conversions.adoc#from_le_bytes[`from_le_bytes`]
+| Reconstructs a value from little-endian ordered bytes
+
+| xref:byte_conversions.adoc#to_ne_bytes[`to_ne_bytes`]
+| Returns the 32 bytes of the object representation
+
+| xref:byte_conversions.adoc#from_ne_bytes[`from_ne_bytes`]
+| Reconstructs a value from the object representation
+|===
+
+[#api_charconv]
+=== xref:charconv.adoc[`<charconv>`]
+
+[cols="1,2", options="header"]
+|===
+| Function | Description
+
+| xref:charconv.adoc#to_chars[`to_chars`]
+| Converts integer to character sequence
+
+| xref:charconv.adoc#from_chars[`from_chars`]
+| Converts character sequence to integer
+|===
+
+[#api_cmath]
+=== `<cmath>`
+
+[cols="1,2", options="header"]
+|===
+| Function | Description
+
+| xref:uint256.adoc#u256_math_operators[`abs`]
+| Absolute value (returns its argument, for parity with the signed type)
+|===
+
+[#api_cstdlib]
+=== xref:cstdlib.adoc[`<cstdlib>`]
+
+[cols="1,2", options="header"]
+|===
+| Function | Description
+
+| xref:cstdlib.adoc[`div`]
+| Computes quotient and remainder simultaneously
+|===
+
+[#api_functional]
+=== xref:hash.adoc[`<functional>`]
+
+[cols="1,2", options="header"]
+|===
+| Specialization | Description
+
+| xref:hash.adoc[`std::hash<uint256>`]
+| Enables `uint256` as a key in unordered associative containers
+
+| xref:hash.adoc#hash_container_hash[`hash_value`]
+| ADL hash function for Boost.ContainerHash and Boost.Unordered
+|===
+
+[#api_formatting]
+=== xref:format.adoc[Formatting]
+
+[cols="1,2", options="header"]
+|===
+| Library | Description
+
+| xref:format.adoc#std_format[`<format>`]
+| C++20 `std::format` support
+
+| xref:format.adoc#fmt_format[`pass:[{fmt}]`]
+| `pass:[{fmt}]` library support
+|===
+
+[#api_iostream]
+=== xref:stream.adoc[`<iostream>`]
+
+[cols="1,2", options="header"]
+|===
+| Operator | Description
+
+| xref:stream.adoc#stream[`operator<<`]
+| Stream insertion operator
+
+| xref:stream.adoc#stream[`operator>>`]
+| Stream extraction operator
+|===
+
+[#api_ios]
+=== xref:stream.adoc#ios[`<ios>`]
+
+[cols="1,2", options="header"]
+|===
+| Manipulator | Description
+
+| xref:stream.adoc#ios[`std::oct`]
+| Octal output format
+
+| xref:stream.adoc#ios[`std::dec`]
+| Decimal output format
+
+| xref:stream.adoc#ios[`std::hex`]
+| Hexadecimal output format
+
+| xref:stream.adoc#ios[`std::uppercase`]
+| Uppercase hex digits
+
+| xref:stream.adoc#ios[`std::nouppercase`]
+| Lowercase hex digits
+
+| xref:stream.adoc#ios[`std::showbase`]
+| Adds a leading base prefix on output
+
+| xref:stream.adoc#ios[`std::noshowbase`]
+| Omits the leading base prefix on output
+|===
+
+[#api_numeric]
+=== xref:numeric.adoc[`<numeric>`]
+
+[cols="1,2", options="header"]
+|===
+| Function | Description
+
+| xref:numeric.adoc#sat_arith[`saturating_add`]
+| Saturating addition
+
+| xref:numeric.adoc#sat_arith[`saturating_sub`]
+| Saturating subtraction
+
+| xref:numeric.adoc#sat_arith[`saturating_mul`]
+| Saturating multiplication
+
+| xref:numeric.adoc#sat_arith[`saturating_div`]
+| Saturating division
+
+| xref:numeric.adoc#saturating_cast[`saturating_cast`]
+| Saturating type cast
+
+| xref:numeric.adoc#gcd[`gcd`]
+| Greatest common divisor
+
+| xref:numeric.adoc#lcm[`lcm`]
+| Least common multiple
+
+| xref:numeric.adoc#midpoint[`midpoint`]
+| Midpoint between two values
+
+| xref:numeric.adoc#int_div[`div_to_zero`, `div_rem_to_zero`]
+| Division rounding towards zero
+
+| xref:numeric.adoc#int_div[`div_away_zero`, `div_rem_away_zero`]
+| Division rounding away from zero
+
+| xref:numeric.adoc#int_div[`div_to_pos_inf`, `div_rem_to_pos_inf`]
+| Division rounding towards positive infinity
+
+| xref:numeric.adoc#int_div[`div_to_neg_inf`, `div_rem_to_neg_inf`]
+| Division rounding towards negative infinity
+
+| xref:numeric.adoc#int_div[`div_euclid`, `div_rem_euclid`]
+| Euclidean division
+
+| xref:numeric.adoc#int_div[`div_ties_to_zero`, `div_rem_ties_to_zero`]
+| Division rounding to nearest, ties towards zero
+
+| xref:numeric.adoc#int_div[`div_ties_away_zero`, `div_rem_ties_away_zero`]
+| Division rounding to nearest, ties away from zero
+
+| xref:numeric.adoc#int_div[`div_ties_to_pos_inf`, `div_rem_ties_to_pos_inf`]
+| Division rounding to nearest, ties towards positive infinity
+
+| xref:numeric.adoc#int_div[`div_ties_to_neg_inf`, `div_rem_ties_to_neg_inf`]
+| Division rounding to nearest, ties towards negative infinity
+
+| xref:numeric.adoc#int_div[`div_ties_to_odd`, `div_rem_ties_to_odd`]
+| Division rounding to nearest, ties to the odd quotient
+
+| xref:numeric.adoc#int_div[`div_ties_to_even`, `div_rem_ties_to_even`]
+| Division rounding to nearest, ties to the even quotient
+
+| xref:numeric.adoc#int_div[`rem_euclid`]
+| Euclidean remainder, always in `[0, y)`
+|===
+
+[#api_string]
+=== xref:string.adoc[`<string>`]
+[cols="1,2", options="header"]
+|===
+| Function | Description
+
+| xref:string.adoc[`to_string`]
+| `std::string` conversion of base-10 values
+
+| xref:string.adoc[`to_wstring`]
+| `std::wstring` conversion of base-10 values
+|===
+
+[#api_utilities]
+=== xref:utilities.adoc[Utilities]
+
+[cols="1,2", options="header"]
+|===
+| Function | Description
+
+| xref:utilities.adoc#powm[`powm`]
+| Modular exponentiation `(base ^ exp) mod m`
+
+| xref:utilities.adoc#ipow[`ipow`]
+| Integer power `base ^ exp` (wraps modulo `2^256`)
+
+| xref:utilities.adoc#isqrt[`isqrt`]
+| Integer square root `floor(sqrt(n))`
+
+| xref:utilities.adoc#checked[`ckd_add`]
+| Checked addition (C23 `<stdckdint.h>` contract)
+
+| xref:utilities.adoc#checked[`ckd_sub`]
+| Checked subtraction (C23 `<stdckdint.h>` contract)
+
+| xref:utilities.adoc#checked[`ckd_mul`]
+| Checked multiplication (C23 `<stdckdint.h>` contract)
+
+| xref:utilities.adoc#comparison[`cmp_equal`]
+| Signedness-safe equality (C++26 `<utility>` contract)
+
+| xref:utilities.adoc#comparison[`cmp_not_equal`]
+| Signedness-safe inequality
+
+| xref:utilities.adoc#comparison[`cmp_less`]
+| Signedness-safe less-than
+
+| xref:utilities.adoc#comparison[`cmp_greater`]
+| Signedness-safe greater-than
+
+| xref:utilities.adoc#comparison[`cmp_less_equal`]
+| Signedness-safe less-than-or-equal
+
+| xref:utilities.adoc#comparison[`cmp_greater_equal`]
+| Signedness-safe greater-than-or-equal
+
+| xref:utilities.adoc#in_range[`in_range`]
+| Whether a value is representable in a target integer type
+|===
+
+[#api_macros]
+== Macros
+
+[#api_macro_literals]
+=== Constants (`<boost/int256/climits.hpp>`)
+
+[cols="1,2", options="header"]
+|===
+| Macro | Description
+
+| `BOOST_INT256_UINT256_MAX`
+| Maximum value for `uint256`
+|===
+
+=== Literals
+
+[cols="1,2", options="header"]
+|===
+| Macro | Description
+
+| xref:literals.adoc[`BOOST_INT256_UINT256_C`]
+| Unsigned 256-bit constant macro
+|===
+
+[#api_macro_configuration]
+=== Configuration
+
+==== User Configuration
+
+[cols="1,2", options="header"]
+|===
+| Macro | Description
+
+| xref:config.adoc#no_int128[`BOOST_INT256_NO_BUILTIN_INT128`]
+| Disables use of the compiler's built-in 128-bit type as a wide intermediate
+
+| xref:config.adoc#no_simd[`BOOST_INT256_NO_SIMD`]
+| Disables the SSE2 and AVX2 equality paths
+
+| xref:config.adoc#disable_exceptions[`BOOST_INT256_DISABLE_EXCEPTIONS`]
+| Disables exception throwing
+
+| xref:config.adoc#enable_cuda[`BOOST_INT256_ENABLE_CUDA`]
+| Enables CUDA support allowing the library type and functions to be run on both host and device
+
+| xref:config.adoc#enable_sycl[`BOOST_INT256_ENABLE_SYCL`]
+| Enables SYCL device support
+
+| xref:config.adoc#build_module[`BOOST_INT256_BUILD_MODULE`]
+| Builds the library as a pass:[C++20] named module (`import boost.int256`)
+|===
+
+==== Automatic Configuration
+
+[cols="1,2", options="header"]
+|===
+| Macro | Description
+
+| xref:config.adoc#automatic_config[`BOOST_INT256_HAS_INT128`]
+| Defined if the compiler provides `pass:[__int128]`
+
+| xref:config.adoc#automatic_config[`BOOST_INT256_ENDIAN_LITTLE_BYTE`]
+| Defined to `1` on little-endian systems
+
+| xref:config.adoc#automatic_config[`BOOST_INT256_ENDIAN_BIG_BYTE`]
+| Defined to `1` on big-endian systems
+
+| xref:config.adoc#automatic_config[`BOOST_INT256_HAS_MSVC_INT128`]
+| Defined when the MSVC simulated 128-bit integer types are available
+
+| xref:config.adoc#automatic_config[`BOOST_INT256_HAS_GPU_SUPPORT`]
+| Defined when CUDA or SYCL device support is enabled
+
+| xref:config.adoc#automatic_config[`BOOST_INT256_HAS_SPACESHIP_OPERATOR`]
+| Defined when pass:[C++20] three-way comparison is available
+
+| xref:config.adoc#automatic_config[`BOOST_INT256_HAS_FORMAT`]
+| Defined when pass:[C++20] `<format>` is available
+
+| xref:config.adoc#automatic_config[`BOOST_INT256_HAS_FMT_FORMAT`]
+| Defined when the pass:[{fmt}] library is available
+
+| xref:config.adoc#host_device[`BOOST_INT256_HOST_DEVICE`]
+| Expands to `pass:[__host__ __device__]` under NVCC, and to `SYCL_EXTERNAL` under SYCL
+|===
+
+[#api_headers]
+== Headers
+
+[cols="1,2", options="header"]
+|===
+| Header | Contents
+
+| `<boost/int256.hpp>`
+| Convenience header including the entire library
+
+| xref:bit.adoc[`<boost/int256/bit.hpp>`]
+| Bit manipulation functions
+
+| xref:byte_conversions.adoc[`<boost/int256/byte_conversions.hpp>`]
+| Big-endian and little-endian byte order conversions
+
+| xref:charconv.adoc[`<boost/int256/charconv.hpp>`]
+| Character conversion functions
+
+| `<boost/int256/climits.hpp>`
+| Max value macro
+
+| xref:cstdlib.adoc[`<boost/int256/cstdlib.hpp>`]
+| Combined division and modulo function
+
+| xref:format.adoc#fmt_format[`<boost/int256/fmt_format.hpp>`]
+| Formatting integration for pass:[{fmt}]
+
+| xref:format.adoc#std_format[`<boost/int256/format.hpp>`]
+| Formatting integration for pass:[C++20] `<format>`
+
+| xref:hash.adoc[`<boost/int256/hash.hpp>`]
+| `std::hash` specialization for `uint256`
+
+| `<boost/int256/int256.hpp>`
+| The xref:uint256.adoc[`uint256`] type
+
+| xref:stream.adoc[`<boost/int256/iostream.hpp>`]
+| Iostream overloads for `uint256`
+
+| `<boost/int256/limits.hpp>`
+| Overload for `std::numeric_limits` for `uint256`
+
+| xref:literals.adoc[`<boost/int256/literals.hpp>`]
+| User-defined literals for `uint256`
+
+| xref:numeric.adoc[`<boost/int256/numeric.hpp>`]
+| Numeric algorithms (gcd, lcm, midpoint, integer division)
+
+| xref:string.adoc[`<boost/int256/string.hpp>`]
+| `to_string` overloads
+
+| `<boost/int256/random.hpp>`
+| Required for usage of Boost.Random
+
+| xref:utilities.adoc[`<boost/int256/utilities.hpp>`]
+| Modular exponentiation and other library-specific utilities
+
+|===

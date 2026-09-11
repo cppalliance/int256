@@ -1,0 +1,290 @@
+////
+Copyright 2026 Matt Borland
+Distributed under the Boost Software License, Version 1.0.
+https://www.boost.org/LICENSE_1_0.txt
+////
+
+[#utilities]
+= Utilities
+:idprefix: utilities_
+
+The `<boost/int256/utilities.hpp>` header collects helpers that operate on the library type directly and would not fit naturally into the analogous STL-style headers.
+The functions are tuned specifically for `uint256` rather than being template generalizations, which allows the library to dispatch to a fast path based on the shape of the modulus.
+
+[source, c++]
+----
+#include <boost/int256/utilities.hpp>
+----
+
+[#powm]
+== Modular Exponentiation
+
+Computes `(base ^ exp) mod m`.
+The naive expression `ipow(base, exp) % m` is unusable for 256-bit inputs because `base ^ exp` overflows almost immediately; `powm` performs the reduction inside the exponentiation loop and selects an algorithm based on the modulus:
+
+* If `has_single_bit(m)` is `true`, modular reduction collapses to a bitmask and no division is performed.
+* If the modulus fits in 64 bits, the loop runs on 64-bit lanes. The product of two values below the modulus fits in 128 bits, which a `uint256` holds exactly, so each step is one multiply and one reduction.
+* Otherwise the modulus uses more than 64 bits, and `powm` uses a shift-and-add inner multiply so that no intermediate value ever exceeds 256 bits. This avoids forming the 512-bit product that a naive square-and-multiply implementation would require.
+
+[source, c++]
+----
+namespace boost {
+namespace int256 {
+
+BOOST_INT256_HOST_DEVICE constexpr uint256 powm(uint256 base, uint256 exp, const uint256& m) noexcept;
+
+} // namespace int256
+} // namespace boost
+----
+
+=== Special Cases
+
+[cols="1,1", options="header"]
+|===
+| Input | Result
+
+| `m == 0`
+| `0`
+
+| `m == 1`
+| `0`
+
+| `exp == 0`
+| `1` for `m > 1` (following the conventional definition `0^0 == 1`); the `m == 0` and `m == 1` rows above take precedence, so `powm(0, 0, 0)` and `powm(0, 0, 1)` return `0`
+
+| `base == 0` and `exp > 0`
+| `0`
+|===
+
+[#ipow]
+== Integer Power
+
+Computes `base ^ exp` by exponentiation by squaring, with a 64-bit exponent.
+Unlike `powm` there is no modulus: the result is the true power reduced modulo `2^256^`, which is the same rollover behavior as the library's `operator*`.
+`ipow(base, exp)` is therefore equivalent to multiplying `base` by itself `exp` times.
+
+[source, c++]
+----
+namespace boost {
+namespace int256 {
+
+BOOST_INT256_HOST_DEVICE constexpr uint256 ipow(uint256 base, std::uint64_t exp) noexcept;
+
+} // namespace int256
+} // namespace boost
+----
+
+The exponent is unsigned, so negative powers (which are not integers) cannot be requested.
+Because the result wraps on overflow rather than saturating or reporting an error, `ipow` is appropriate when rollover semantics are intended; use xref:numeric.adoc#sat_arith[`saturating_mul`] in a loop when they are not.
+
+=== Special Cases
+
+[cols="1,1", options="header"]
+|===
+| Input | Result
+
+| `exp == 0`
+| `1` (including `ipow(0, 0) == 1`, following the conventional definition `0^0 == 1`)
+
+| `base == 0` and `exp > 0`
+| `0`
+
+| `base ^ exp` exceeds 256 bits
+| The low 256 bits of the true power, matching the rollover of `operator*`
+|===
+
+[#isqrt]
+== Integer Square Root
+
+Computes the integer square root `floor(sqrt(n))`: the largest integer `r` whose square does not exceed `n`.
+The computation runs entirely in integer arithmetic using Newton's method, so it is exact (no floating-point rounding, which at this width would be wrong for most inputs) and usable in a `constexpr` context.
+
+[source, c++]
+----
+namespace boost {
+namespace int256 {
+
+BOOST_INT256_HOST_DEVICE constexpr uint256 isqrt(const uint256& n) noexcept;
+
+} // namespace int256
+} // namespace boost
+----
+
+=== Special Cases
+
+[cols="1,1", options="header"]
+|===
+| Input | Result
+
+| `n < 2`
+| `n`, so `isqrt(0) == 0` and `isqrt(1) == 1`
+
+| otherwise
+| `floor(sqrt(n))`, the largest `r` whose square does not exceed `n`
+|===
+
+[#checked]
+== Checked Arithmetic
+
+`ckd_add`, `ckd_sub`, and `ckd_mul` implement the checked integer arithmetic interface introduced by C23's `<stdckdint.h>`, but without requiring a C23 toolchain; they are available in pass:[C++14] and later.
+
+Each function computes `a + b`, `a - b`, or `a * b` respectively, as if both operands were represented in a signed integer type with infinite range, and then converts that mathematical result to the type pointed to by `result`.
+The function returns `false` when `*result` correctly represents the mathematical result of the operation.
+Otherwise it returns `true`, and `*result` is set to the mathematical result wrapped around (reduced modulo `2^N`) to the width `N` of `*result`.
+`*result` is always written, whether or not the operation overflowed.
+
+[source, c++]
+----
+namespace boost {
+namespace int256 {
+
+template <typename T1, typename T2, typename T3>
+BOOST_INT256_HOST_DEVICE constexpr bool ckd_add(T1* result, T2 a, T3 b) noexcept;
+
+template <typename T1, typename T2, typename T3>
+BOOST_INT256_HOST_DEVICE constexpr bool ckd_sub(T1* result, T2 a, T3 b) noexcept;
+
+template <typename T1, typename T2, typename T3>
+BOOST_INT256_HOST_DEVICE constexpr bool ckd_mul(T1* result, T2 a, T3 b) noexcept;
+
+} // namespace int256
+} // namespace boost
+----
+
+The three type parameters are independent: the result type and the two operand types may differ in width and signedness.
+The operation always uses the exact mathematical value of each operand, so a negative signed value added to an unsigned one is evaluated correctly, and a `uint256` result from two 64-bit operands can never overflow.
+
+Following the C23 rules, `T1`, `T2`, and `T3` may be any integer type other than `bool`, plain `char`, an enumerated type, or a bit-precise (`_BitInt`) type.
+In addition to the standard and extended integer types, the library's `uint256` is accepted.
+
+The following example exercises all three operations, including the wrap-around and the mixed-type behavior described above.
+
+.This https://github.com/cppalliance/int256/blob/develop/example/checked_arithmetic.cpp[example] demonstrates checked addition, subtraction, and multiplication following the C23 checked-integer contract.
+====
+[source, c++]
+----
+include::example$checked_arithmetic.cpp[]
+----
+
+Output:
+----
+=== Results That Fit ===
+ckd_add(20, 22): overflow=false, result=42
+
+=== Addition Overflow ===
+ckd_add(max, 1): overflow=true, wrapped=0
+
+=== Subtraction Underflow ===
+ckd_sub(0, 1): overflow=true, wrapped=115792089237316195423570985008687907853269984665640564039457584007913129639935
+
+=== Multiplication Overflow ===
+ckd_mul(2^128, 2^128): overflow=true, wrapped=0
+ckd_mul(2^128 - 1, 2^128 - 1): overflow=false, result=115792089237316195423570985008687907852589419931798687112530834793049593217025
+  (the largest product that still fits)
+
+=== Mixed Types ===
+ckd_add<uint64_t>(uint256{5}, 3): overflow=false, result=8
+ckd_add<uint64_t>(max, 0): overflow=true, wrapped=18446744073709551615
+ckd_mul<uint256>(UINT64_MAX, UINT64_MAX): overflow=false, result=340282366920938463426481119284349108225
+ckd_mul<uint8_t>(20, 20): overflow=true, wrapped=144
+----
+====
+
+[#comparison]
+== Integer Comparison
+
+`cmp_equal`, `cmp_not_equal`, `cmp_less`, `cmp_greater`, `cmp_less_equal`, and `cmp_greater_equal` are the pass:[C++26] https://eel.is/c++draft/utility.intcmp[integer comparison functions] extended to `uint256` and the builtin 128-bit types.
+They are available in pass:[C++14] and later.
+
+Unlike the built-in relational operators, which follow the usual arithmetic conversions, these functions compare the true mathematical values of their operands regardless of signedness.
+When a `uint256` is compared with a negative value the operators convert that value to unsigned, so `pass:[uint256{0} > -1]` is reported as `false` and `pass:[(std::numeric_limits<uint256>::max)() == -1]` as `true`.
+The `cmp_*` functions report the mathematically correct answer in both cases.
+
+[source, c++]
+----
+namespace boost {
+namespace int256 {
+
+// Each function participates in overload resolution only when both operands are
+// permitted and at least one is uint256 or a builtin 128-bit type. The other
+// operand may be any standard or extended integer type other than bool, a
+// character type, or std::byte.
+
+template <typename T, typename U>
+BOOST_INT256_HOST_DEVICE constexpr bool cmp_equal(T a, U b) noexcept;
+template <typename T, typename U>
+BOOST_INT256_HOST_DEVICE constexpr bool cmp_not_equal(T a, U b) noexcept;
+template <typename T, typename U>
+BOOST_INT256_HOST_DEVICE constexpr bool cmp_less(T a, U b) noexcept;
+template <typename T, typename U>
+BOOST_INT256_HOST_DEVICE constexpr bool cmp_greater(T a, U b) noexcept;
+template <typename T, typename U>
+BOOST_INT256_HOST_DEVICE constexpr bool cmp_less_equal(T a, U b) noexcept;
+template <typename T, typename U>
+BOOST_INT256_HOST_DEVICE constexpr bool cmp_greater_equal(T a, U b) noexcept;
+
+} // namespace int256
+} // namespace boost
+----
+
+`cmp_equal(a, b)` returns `true` when `a` and `b` are mathematically equal, and `cmp_less(a, b)` returns `true` when `a` is mathematically less than `b`.
+The remaining four functions are defined in terms of these two exactly as in the standard: `cmp_not_equal` is `!cmp_equal(a, b)`, `cmp_greater(a, b)` is `cmp_less(b, a)`, `cmp_less_equal(a, b)` is `!cmp_less(b, a)`, and `cmp_greater_equal(a, b)` is `!cmp_less(a, b)`.
+
+Following the standard, a `bool`, a character type (`char`, `wchar_t`, `char8_t`, `char16_t`, `char32_t`), or `std::byte` is not a permitted operand, and such a call is ill-formed.
+
+[#in_range]
+== Range Checking
+
+`in_range<R>(t)` returns `true` when the value `t` is representable in the type `R`, that is, when `R` can hold `t` without the value changing.
+It is equivalent to `cmp_greater_equal(t, (std::numeric_limits<R>::min)()) && cmp_less_equal(t, (std::numeric_limits<R>::max)())`, so the range check is itself signedness-safe.
+
+[source, c++]
+----
+namespace boost {
+namespace int256 {
+
+template <typename R, typename Integer>
+BOOST_INT256_HOST_DEVICE constexpr bool in_range(Integer t) noexcept;
+
+} // namespace int256
+} // namespace boost
+----
+
+The target type `R` and the type of `t` may each be a builtin integer or `uint256`; at least one of them is `uint256` or a builtin 128-bit type (use `std::in_range` when neither is).
+For example, `pass:[in_range<std::uint8_t>(uint256{200})]` is `true` while `pass:[in_range<std::int8_t>(uint256{200})]` is `false`, and `in_range<uint256>(-1)` is `false` because a negative value is not representable in an unsigned type.
+It is the natural guard in front of a narrowing conversion, which otherwise keeps only the low bits.
+
+.This https://github.com/cppalliance/int256/blob/develop/example/integer_comparison.cpp[example] demonstrates signedness-safe comparison and range checking.
+====
+[source, c++]
+----
+include::example$integer_comparison.cpp[]
+----
+
+Output:
+----
+=== Signedness-safe comparison ===
+max == -1 (operator):        true
+cmp_equal(max, -1):          false
+uint256{0} > -1 (operator):  false
+cmp_less(-1, uint256{0}):    true
+
+=== Mixed with builtin integers ===
+cmp_less(-5, uint256{0}):    true
+cmp_equal(uint256{42}, 42):  true
+cmp_less(uint256{42}, 43U):  true
+
+=== in_range ===
+in_range<std::uint8_t>(uint256{200}):  true
+in_range<std::int8_t>(uint256{200}):   false
+in_range<std::uint64_t>(max):          false
+in_range<std::uint64_t>(UINT64_MAX):   true
+in_range<uint256>(-1):                 false
+in_range<uint256>(UINT64_MAX):         true
+
+=== Guarding a narrowing conversion ===
+7 fits in a std::uint64_t
+18446744073709551615 fits in a std::uint64_t
+115792089237316195423570985008687907853269984665640564039457584007913129639935 does not fit in a std::uint64_t
+----
+====

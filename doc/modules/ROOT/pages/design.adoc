@@ -1,0 +1,83 @@
+////
+Copyright 2026 Matt Borland
+Distributed under the Boost Software License, Version 1.0.
+https://www.boost.org/LICENSE_1_0.txt
+////
+
+[#design]
+= Design Decisions
+:idprefix: design_
+
+== Exactly 256 Bits on Every Platform
+
+The central design goal is that `sizeof(uint256)` is exactly 32 bytes on every supported platform, that the type is trivially copyable and standard layout, and that its object representation is four 64-bit words and nothing else.
+No compiler offers a native 256-bit integer, and a multiprecision integer stores bookkeeping alongside the digits, so neither can be written straight into a packet, a file format, or a device buffer.
+See xref:comp_to_multiprecision.adoc[Comparison to Boost.Multiprecision] for the tradeoffs relative to a multiprecision `number`.
+
+== Four Words in a Fixed Order
+
+The single data member is `std::uint64_t words[4]`, with `words[0]` the least significant word on every platform, including big-endian ones.
+The library does not reorder the words by endianness.
+There is no native 256-bit type to match layouts with, so an endian-dependent order would buy nothing and would double the amount of code that has to be tested; a fixed order also keeps the constant-evaluated paths and the runtime paths identical.
+
+The consequence is that on a big-endian host the object representation of a `uint256` is mixed-endian: the bytes inside each word are big-endian, while the words themselves ascend from least significant to most significant.
+That only matters for the native-order byte functions, and it is exactly what xref:byte_conversions.adoc[Byte Order Conversions] documents: `to_ne_bytes` and `from_ne_bytes` are defined as the object representation, while `to_be_bytes`, `to_le_bytes`, `from_be_bytes`, and `from_le_bytes` are host-independent value encodings that produce the same bytes for the same value on every platform.
+
+The alignment is the natural alignment of the member array, that is `alignof(std::uint64_t)`, and the type is deliberately not over-aligned.
+pass:[C++14] has no aligned `operator new`, so an over-aligned element type would make `std::vector<uint256>` ill-behaved, and MSVC warns about over-aligned aggregates passed by value.
+The SIMD paths therefore load through `std::memcpy` into a vector local rather than casting a pointer to the object.
+
+== No Dependencies
+
+Nothing under `include/boost/int256/` includes a header from another Boost library, or from any other third-party library, outside of two `pass:[__has_include]` guarded integrations (Boost.Charconv in `charconv.hpp` and pass:[{fmt}] in `fmt_format.hpp`).
+The library is usable in a project that has no Boost at all, and the whole of it can be reduced to one file with the amalgamation script in `extra/`.
+
+== Intrinsics with a Portable Fallback
+
+Every operation has a portable implementation over the four words that is `constexpr` in pass:[C++14] and is always present.
+Faster paths are layered on top of it and are selected at compile time:
+
+* The compiler's built-in 128-bit type, where it exists, is used as the intermediate for the 64x64 to 128 bit products and the 128 by 64 bit division steps. It is never used as the storage representation. `BOOST_INT256_NO_BUILTIN_INT128` turns this off, which is also what the SYCL device pass does automatically because the device target has no such type.
+* On MSVC x64 the corresponding intrinsics are used instead: `_umul128`, `__umulh`, `_udiv128`, `_addcarry_u64`, and `_subborrow_u64`.
+* On x86-64 with GCC or Clang a `divq` instruction provides the 128 by 64 bit division step, and the ADX or classic carry intrinsics provide the addition chains.
+* On 32-bit targets, and anywhere else without a wide intermediate, the portable four-word paths run, with the 64 by 32 bit division chain replacing the 128 by 64 bit one.
+* Equality uses SSE2 or AVX2 where the target has it, loading through `std::memcpy`. `BOOST_INT256_NO_SIMD` turns that off.
+
+Because a compiler intrinsic cannot be evaluated at compile time, every non-`constexpr` path sits behind a constant-evaluation check, so constant expressions always take the portable path.
+The result is that a value computed at compile time and the same value computed at run time agree bit for bit, on every platform and in either configuration.
+
+== Multiplication and Division
+
+Multiplication is 64-bit-word schoolbook: six full 64x64 to 128 bit products plus four low-half products, with the column sums carried explicitly because a column can carry more than one.
+
+Division dispatches on the number of significant words in the divisor:
+
+* One word: a chain of 128 by 64 bit divisions where the hardware provides one, and a chain of 64 by 32 bit divisions where it does not.
+* Two words: Knuth's Algorithm D over 64-bit limbs, with a Moller and Granlund reciprocal 3 by 2 accelerator used at run time.
+* Three or four words: Knuth's Algorithm D.
+
+Algorithm D is used with 64-bit limbs rather than the 32-bit limbs a textbook implementation uses, which halves the number of quotient-digit estimates. The estimate itself needs a 128 by 64 bit division, which is the step the platform paths above provide.
+See xref:reference.adoc[References] for the sources.
+
+Division by zero is undefined behavior, exactly as it is for the built-in integer types, and is not checked.
+
+== pass:[C++14] and constexpr
+
+The library targets pass:[C++14] as its minimum standard.
+Relaxed pass:[C++14] `constexpr` allows nearly all functionality to be evaluated at compile time, including division and parsing a literal, so the type can be used in constant expressions much like a built-in integer.
+Meeting the pass:[C++14] bar also satisfies the conceptual requirements of libraries such as Boost.Math and Boost.Random, which this library integrates with directly.
+
+== Emulating a Built-in Integer
+
+To behave like a built-in integer in generic code, the type provides implicit conversions to and from the built-in integer and floating-point types.
+The single exception is `operator bool`, which is `explicit` to match the standard library convention and to avoid unintended participation in arithmetic and overload resolution.
+
+Mixed-width and mixed-sign operations follow the usual arithmetic conversions of the language, so a signed operand is sign-extended into all four words before the operation, and `pass:[uint256{0} < -1]` is `true` for the same reason `0U < -1` is.
+A floating-point operand converts the 256-bit operand to the floating-point type first, again as the usual arithmetic conversions require, and the combinations a built-in integer rejects (`pass:[%]`, `pass:[&]`, `pass:[|]`, `pass:[^]`, `pass:[<<]`, `pass:[>>]` with a floating-point operand) are declared deleted rather than left to the implicit conversions.
+See xref:mixed_type_ops.adoc[Mixed Type Operations] for the complete result-type rules.
+
+== GPU Support
+
+The type and many of the free functions are annotated with `BOOST_INT256_HOST_DEVICE` so they can be used unchanged in CUDA device code when the library is compiled with `BOOST_INT256_ENABLE_CUDA`, and in SYCL device code under `BOOST_INT256_ENABLE_SYCL`.
+The pieces that depend on host facilities are host-only by construction: `std::hash`, the iostream operators, `to_string`, the formatters, and the `long double` conversion.
+See xref:config.adoc[Configuration Macros].

@@ -1,0 +1,851 @@
+////
+Copyright 2026 Matt Borland
+Distributed under the Boost Software License, Version 1.0.
+https://www.boost.org/LICENSE_1_0.txt
+////
+
+[#examples]
+= Examples
+:idprefix: examples_
+
+All the following examples can be found in the example/ folder of the library.
+Each one is built and run as part of the test suite, and the output shown below is
+what the program printed.
+
+[#examples_construction]
+== Basic Construction
+
+.This https://github.com/cppalliance/int256/blob/develop/example/construction.cpp[example] demonstrates every way a `uint256` can be constructed: from a built-in integer, from the four 64-bit words, from a literal or the constant macro, from a stream, and from a floating-point value.
+====
+[source, c++]
+----
+include::example$construction.cpp[]
+----
+
+Output:
+----
+=== uint256 Construction ===
+From builtin (42U): 42
+From words (0, 0, 1, 0) = 2^64: 18446744073709551616
+From words (max, max, max, max): 115792089237316195423570985008687907853269984665640564039457584007913129639935
+  Equals numeric_limits max? true
+From literal 12345_U256: 12345
+From string literal (max): 115792089237316195423570985008687907853269984665640564039457584007913129639935
+From BOOST_INT256_UINT256_C(2^192): 6277101735386680763835789423207666416102355444464034512896
+From stringstream: 123456789012345678901234567890123456789012345678901234567890
+
+=== Default and Copy Construction ===
+Default constructed: 0
+Copy constructed: 6277101735386680763835789423207666416102355444464034512896
+
+=== Floating-Point Construction ===
+uint256 from 12345.9 (truncated): 12345
+uint256 from 2^200: 1606938044258990275541962092341162602522202993782792835301376
+
+=== Floating-Point Edge Cases ===
+uint256 from NaN: 0
+uint256 from -1.0 (clamped to zero): 0
+uint256 from +infinity (saturates): 115792089237316195423570985008687907853269984665640564039457584007913129639935
+uint256 from 1e80 (saturates): 115792089237316195423570985008687907853269984665640564039457584007913129639935
+----
+====
+
+[#examples_arithmetic]
+== Basic Arithmetic
+
+.This https://github.com/cppalliance/int256/blob/develop/example/basic_arithmetic.cpp[example] demonstrates the arithmetic operators, starting with the exact product of two 128-bit values, which is the case a 256-bit type exists for.
+====
+[source, c++]
+----
+include::example$basic_arithmetic.cpp[]
+----
+
+Output:
+----
+=== The 128 by 128 bit product ===
+a = 2^128 - 1 = 340282366920938463463374607431768211455
+a * a         = 115792089237316195423570985008687907852589419931798687112530834793049593217025
+  (that is 2^256 - 2^129 + 1, and it needs all four words)
+
+=== Addition, subtraction, multiplication ===
+x = 1000000000000
+y = 999999999999
+x + y = 1999999999999
+x - y = 1
+x * y = 999999999999000000000000
+
+=== Division and modulo ===
+x / 7 = 142857142857
+x % 7 = 1
+(a * a) / a = 340282366920938463463374607431768211455
+(a * a) % a = 0
+
+=== Comparisons ===
+x > y:  true
+x == y: false
+x != y: true
+b == a: true
+
+=== Compound assignment operators ===
+z = 100
+z += 50: 150
+z -= 25: 125
+z *= 2:  250
+z /= 5:  50
+z %= 7:  1
+
+=== Increment and decrement ===
+counter = 10
+++counter = 11
+counter++ = 11
+counter = 12
+--counter = 11
+
+=== Unary operators ===
+-one = 115792089237316195423570985008687907853269984665640564039457584007913129639935
+~one = 115792089237316195423570985008687907853269984665640564039457584007913129639934
+abs(x) = 1000000000000
+----
+====
+
+[#examples_io]
+== IO Streaming
+
+.This https://github.com/cppalliance/int256/blob/develop/example/stream.cpp[example] demonstrates stream insertion and extraction, and the `<ios>` manipulators that control base, case, base prefix, width and fill.
+====
+[source, c++]
+----
+include::example$stream.cpp[]
+----
+
+Output:
+----
+=== Basic Streaming ===
+Small value: 42
+Value (dec): 36893488147419103231
+Value (hex): 1ffffffffffffffff
+Value (oct): 3777777777777777777777
+Value (upper hex): 1FFFFFFFFFFFFFFFF
+Value (showbase):  0X1FFFFFFFFFFFFFFFF
+Value (dec again): 36893488147419103231
+
+=== Large Values (Beyond 128 bits) ===
+2^128 = 340282366920938463463374607431768211456
+2^200 = 1606938044258990275541962092341162602522202993782792835301376
+uint256 max = 115792089237316195423570985008687907853269984665640564039457584007913129639935
+
+=== String Conversion with std::stringstream ===
+uint256 to string: "1606938044258990275541962092341162602522202993782792835301376"
+String to uint256: 123456789012345678901234567890123456789012345678901234567890
+
+=== Round-trip Conversion ===
+Original:      23450803645956985397271062114592904319886246494160595176910461526512
+As string:     "23450803645956985397271062114592904319886246494160595176910461526512"
+Round-tripped: 23450803645956985397271062114592904319886246494160595176910461526512
+Match: true
+
+=== Width, Fill and Alignment ===
+[............................42]
+[42............................]
+----
+====
+
+[#examples_rollover]
+== Rollover Behavior
+
+.This https://github.com/cppalliance/int256/blob/develop/example/rollover.cpp[example] demonstrates that `uint256` is a modulo type: every operation wraps modulo 2^256^ and nothing at the boundary is undefined.
+====
+[source, c++]
+----
+include::example$rollover.cpp[]
+----
+
+Output:
+----
+=== uint256 behavior ===
+is_modulo: true
+
+Max of uint256: 115792089237316195423570985008687907853269984665640564039457584007913129639935
+Max + 1U: 0
+
+Min of uint256: 0
+Min - 1U: 115792089237316195423570985008687907853269984665640564039457584007913129639935
+
+2^128: 340282366920938463463374607431768211456
+2^128 * 2^128 (wraps to zero): 0
+----
+====
+
+[#examples_bit]
+== `<bit>` support (Bitwise Operations)
+
+.This https://github.com/cppalliance/int256/blob/develop/example/bit.cpp[example] demonstrates the bit manipulation functions, all of which are `constexpr` and span all four words.
+====
+[source, c++]
+----
+include::example$bit.cpp[tags=**;!exclude]
+----
+
+Output:
+----
+popcount(max)        = 256
+countl_zero(1)       = 255
+countr_zero(2^192)   = 192
+bit_width(2^255)     = 256
+bit_ceil(5)          = 8
+has_single_bit(2^99) = true
+byteswap round trip  = true
+----
+====
+
+[#examples_byte_conversions]
+== Byte Order Conversions
+
+.This https://github.com/cppalliance/int256/blob/develop/example/byte_conversions.cpp[example] demonstrates converting a value to and from a 32-byte buffer in big-endian, little-endian, and native order, and reading a SHA-256 digest as an integer.
+====
+[source, c++]
+----
+include::example$byte_conversions.cpp[]
+----
+
+Output:
+----
+=== Byte arrays ===
+to_be_bytes: 01 02 03 04 05 06 07 08 09 0a 0b 0c 0d 0e 0f 10 11 12 13 14 15 16 17 18 19 1a 1b 1c 1d 1e 1f 20
+to_le_bytes: 20 1f 1e 1d 1c 1b 1a 19 18 17 16 15 14 13 12 11 10 0f 0e 0d 0c 0b 0a 09 08 07 06 05 04 03 02 01
+to_ne_bytes: 20 1f 1e 1d 1c 1b 1a 19 18 17 16 15 14 13 12 11 10 0f 0e 0d 0c 0b 0a 09 08 07 06 05 04 03 02 01
+
+=== Reading a value back out of bytes ===
+from_be_bytes: 300
+from_le_bytes: 19903532184728499472755846345868977080796606098303847563239893857561361776640
+
+=== Whole value conversions ===
+object representation of to_be(value): 01 02 03 04 05 06 07 08 09 0a 0b 0c 0d 0e 0f 10 11 12 13 14 15 16 17 18 19 1a 1b 1c 1d 1e 1f 20
+from_be recovers: 455867356320691211509944977504407603390036387149619137164185182714736811808
+value:            455867356320691211509944977504407603390036387149619137164185182714736811808
+
+from_le_bytes over a char buffer: 455867356320691211509944977504407603390036387149619137164185182714736811808
+
+SHA-256 of the empty string as an integer:
+  decimal: 102987336249554097029535212322581322789799900648198034993379397001115665086549
+  hex:     e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+  mod 10^9 + 7: 353860983
+----
+====
+
+[#examples_numeric]
+== `<numeric>` support (Saturating Arithmetic)
+
+.This https://github.com/cppalliance/int256/blob/develop/example/saturating_arithmetic.cpp[example] demonstrates saturating arithmetic, which clamps at the limits of the type instead of wrapping, and `saturating_cast` to a narrower type.
+====
+[source, c++]
+----
+include::example$saturating_arithmetic.cpp[]
+----
+
+Output:
+----
+=== Saturating Arithmetic ===
+uint256 max = 115792089237316195423570985008687907853269984665640564039457584007913129639935
+
+=== Saturating Addition and Subtraction ===
+saturating_add(max, max) = 115792089237316195423570985008687907853269984665640564039457584007913129639935
+  (saturates to max; max + max would wrap to max - 1)
+saturating_sub(0, max)   = 0
+  (saturates to 0; 0 - max would wrap to 1)
+
+=== Saturating Multiplication ===
+saturating_mul(2^128, 2^128) = 115792089237316195423570985008687907853269984665640564039457584007913129639935
+  (saturates to max; the operator wraps to 0)
+saturating_mul(max, 2)       = 115792089237316195423570985008687907853269984665640564039457584007913129639935
+saturating_mul(2^100, 2^100) = 1606938044258990275541962092341162602522202993782792835301376
+  (fits exactly, so nothing saturates)
+
+=== Saturating Division ===
+saturating_div(max, 3) = 38597363079105398474523661669562635951089994888546854679819194669304376546645
+
+=== Saturating Casts ===
+saturating_cast<std::uint64_t>(max) = 18446744073709551615 (saturates to UINT64_MAX)
+saturating_cast<std::int64_t>(max)  = 9223372036854775807 (saturates to INT64_MAX)
+saturating_cast<std::int32_t>(max)  = 2147483647 (saturates to INT32_MAX)
+saturating_cast<std::uint64_t>(42)  = 42 (fits, so it is exact)
+----
+====
+
+[#examples_numeric_algorithms]
+== `<numeric>` support (Numeric Algorithms)
+
+.This https://github.com/cppalliance/int256/blob/develop/example/numeric_algorithms.cpp[example] demonstrates `gcd`, `lcm`, and the overflow-free `midpoint`, ending with a binary search over the whole 256-bit range.
+====
+[source, c++]
+----
+include::example$numeric_algorithms.cpp[]
+----
+
+Output:
+----
+=== Greatest Common Divisor (gcd) ===
+gcd(48, 18) = 6
+gcd(123456789012345678, 987654321098765432) = 2
+gcd(2^200, 2^160) = 1461501637330902918203684832716283019655932542976 (= 2^160)
+gcd(3 * 2^100, 5 * 2^100) = 1267650600228229401496703205376 (= 2^100)
+
+=== Least Common Multiple (lcm) ===
+lcm(12, 18) = 36
+lcm(7, 11) = 77 (coprime: lcm = p * q)
+lcm(largest two 64-bit primes) = 340282366920938460843936948965011886881
+
+Verifying gcd * lcm = a * b:
+gcd(12, 18) * lcm(12, 18) = 216
+12 * 18 = 216
+
+=== Midpoint ===
+midpoint(10, 20) = 15
+midpoint(10, 21) = 15 (rounds toward first arg)
+midpoint(21, 10) = 16 (rounds toward first arg)
+
+--- Overflow-safe midpoint ---
+midpoint(max, max - 10) = 115792089237316195423570985008687907853269984665640564039457584007913129639930
+(max + (max - 10)) / 2  = 57896044618658097711785492504343953926634992332820282019728792003956564819962 (wrapped)
+
+--- Binary search over the whole range ---
+isqrt(2^200) by bisection = 1267650600228229401496703205376 (= 2^100)
+----
+====
+
+[#examples_integer_division]
+== `<numeric>` support (Integer Division)
+
+.This https://github.com/cppalliance/int256/blob/develop/example/integer_division.cpp[example] demonstrates the P3724 division family: every rounding mode, which of them coincide for an unsigned type, both halves from one division, and ceiling division that cannot overflow.
+====
+[source, c++]
+----
+include::example$integer_division.cpp[tags=**;!exclude]
+----
+
+Output:
+----
+=== Every rounding mode on 12 / 5 ===
+div_to_zero          = 2
+div_away_zero        = 3
+div_to_pos_inf       = 3
+div_to_neg_inf       = 2
+div_euclid           = 2
+div_ties_to_zero     = 2
+
+=== Which modes coincide for an unsigned type ===
+to_zero == to_neg_inf == euclid: true
+away_zero == to_pos_inf:         true
+operator% == rem_euclid:         true
+
+=== Tie breaking on 7 / 2 ===
+div_ties_to_zero     = 3
+div_ties_away_zero   = 4
+div_ties_to_pos_inf  = 4
+div_ties_to_neg_inf  = 3
+div_ties_to_odd      = 3
+div_ties_to_even     = 4
+
+=== Quotient and remainder from one division ===
+div_rem_to_zero(12, 5):     quotient = 2, remainder = 2
+div_rem_to_pos_inf(12, 5):  quotient = 3, remainder = 115792089237316195423570985008687907853269984665640564039457584007913129639933
+quotient * y + remainder = 12 and 12
+
+=== Ceiling division without overflow ===
+length = 115792089237316195423570985008687907853269984665640564039457584007913129639935
+div_to_pos_inf(length, 1000) = 115792089237316195423570985008687907853269984665640564039457584007913129640
+div_to_zero(length, 1000)    = 115792089237316195423570985008687907853269984665640564039457584007913129639
+(length + 999) / 1000        = 0 (wrapped)
+
+=== Unbiased rounding of a scaled value ===
+1500 / 1000: ties_to_even = 2, ties_away_zero = 2
+2500 / 1000: ties_to_even = 2, ties_away_zero = 3
+3500 / 1000: ties_to_even = 4, ties_away_zero = 4
+4500 / 1000: ties_to_even = 4, ties_away_zero = 5
+----
+====
+
+[#examples_checked]
+== Checked Arithmetic
+
+.This https://github.com/cppalliance/int256/blob/develop/example/checked_arithmetic.cpp[example] demonstrates the C23 `ckd_add`, `ckd_sub` and `ckd_mul` contract, including mixed operand and result types.
+====
+[source, c++]
+----
+include::example$checked_arithmetic.cpp[]
+----
+
+Output:
+----
+=== Results That Fit ===
+ckd_add(20, 22): overflow=false, result=42
+
+=== Addition Overflow ===
+ckd_add(max, 1): overflow=true, wrapped=0
+
+=== Subtraction Underflow ===
+ckd_sub(0, 1): overflow=true, wrapped=115792089237316195423570985008687907853269984665640564039457584007913129639935
+
+=== Multiplication Overflow ===
+ckd_mul(2^128, 2^128): overflow=true, wrapped=0
+ckd_mul(2^128 - 1, 2^128 - 1): overflow=false, result=115792089237316195423570985008687907852589419931798687112530834793049593217025
+  (the largest product that still fits)
+
+=== Mixed Types ===
+ckd_add<uint64_t>(uint256{5}, 3): overflow=false, result=8
+ckd_add<uint64_t>(max, 0): overflow=true, wrapped=18446744073709551615
+ckd_mul<uint256>(UINT64_MAX, UINT64_MAX): overflow=false, result=340282366920938463426481119284349108225
+ckd_mul<uint8_t>(20, 20): overflow=true, wrapped=144
+----
+====
+
+[#examples_mixed_sign]
+== Mixed Signedness Arithmetic
+
+.This https://github.com/cppalliance/int256/blob/develop/example/mixed_type_arithmetic.cpp[example] demonstrates arithmetic between `uint256` and the built-in integer types under the usual arithmetic conversions, including compound assignment onto a built-in integer.
+====
+[source, c++]
+----
+include::example$mixed_type_arithmetic.cpp[]
+----
+
+Output:
+----
+=== Arithmetic with built-in integers ===
+value = 3
+value + 1  = 4
+value - 1  = 2
+value * 2  = 6
+value / 3  = 1
+value % 3  = 0
+10 - value = 7
+10 / value = 3
+
+=== A signed operand is converted, not compared as signed ===
+value - (-1)   = 4
+value > -1     = false (the -1 becomes 2^256 - 1)
+uint256{0} - 1 = 115792089237316195423570985008687907853269984665640564039457584007913129639935
+(use cmp_greater from <boost/int256/utilities.hpp> for the mathematical answer)
+
+=== The result type is always the wider one ===
+UINT64_MAX * uint256{UINT64_MAX} = 340282366920938463426481119284349108225
+UINT64_MAX * UINT64_MAX in 64 bits = 1 (wrapped)
+
+=== Compound Assignment onto a Built-in Integer ===
+unsigned{0} |= uint256{1} -> 1
+int{12} += uint256{5} -> 17
+uint32_t{0} += 2^64 + 7 -> 7
+uint64_t{1} <<= uint256{40} -> 1099511627776
+
+=== Conversions ===
+static_cast<std::uint64_t>(2^128 + 12345) = 12345
+static_cast<bool>(uint256{0}) = false
+static_cast<bool>(wide)       = true
+----
+====
+
+[#examples_mixed_float]
+== Mixed Floating-Point Arithmetic
+
+.This https://github.com/cppalliance/int256/blob/develop/example/mixed_float_arithmetic.cpp[example] demonstrates arithmetic and comparison against `float` and `double`, which convert the 256-bit operand first, exactly as the built-in types do.
+====
+[source, c++]
+----
+include::example$mixed_float_arithmetic.cpp[]
+----
+
+Output:
+----
+=== Arithmetic ===
+value           = 5
+value + 1.0     = 6
+1.0 - value     = -4
+value * 0.5     = 2.5
+value / 2.0     = 2.5
+value * 1.5F    = 7.5 (a float operand gives a float)
+
+=== Comparisons ===
+value < 5.5     = true
+value == 5.0    = true
+value > 4.999   = true
+
+=== Compound Assignment ===
+uint256{4} *= 2.5         = 10
+double{1.0} += uint256{2} = 3
+
+=== Conversions to floating point ===
+double(2^200)  = 1.6069380442589903e+60
+double(max)    = 1.157920892373162e+77
+float(2^200)   = inf (above the range of a float)
+float(2^100)   = 1.2676506002282294e+30
+max == 2^256 as a double: true
+
+=== Precision ===
+2^200 + 1                  = 1606938044258990275541962092341162602522202993782792835301377
+2^200 + 1 == double(2^200) = true
+2^200 + 1 == 2^200 exactly = false
+----
+====
+
+[#examples_boost_math_random]
+== Boost Math and Random Integration
+
+.This https://github.com/cppalliance/int256/blob/develop/example/math_and_random.cpp[example] demonstrates generating `uint256` values with a Boost.Random distribution, both over the whole range and over a narrow range at the top of the type.
+====
+[source, c++]
+----
+include::example$math_and_random.cpp[tags=**;!exclude]
+----
+
+Output:
+----
+=== Random uint256 values ===
+Three draws over the whole range:
+  15779298743775714632317536513379354586146892749525763423127136840744637424342
+  43177445770928097090247088932550690159113821531843733955742654178868113840469
+  60640964292598001157223999640664395760735199570965932942987833599385394609334
+
+Three draws from [2^200, 2^200 + 1000]:
+  1606938044258990275541962092341162602522202993782792835302061 (offset 685)
+  1606938044258990275541962092341162602522202993782792835302013 (offset 637)
+  1606938044258990275541962092341162602522202993782792835302203 (offset 827)
+
+=== A random data set ===
+Samples:               10000
+Mean of the top word:  9.25951e+18
+Expected (UINT64_MAX/2): 9.22337e+18
+Within 2 percent:      true
+Smallest draw has a nonzero top word: true
+Largest draw is above 2^255:          true
+----
+====
+
+[#examples_boost_charconv]
+== Boost.Charconv Integration
+
+.This https://github.com/cppalliance/int256/blob/develop/example/charconv.cpp[example] demonstrates `to_chars` and `from_chars` in several bases, and the error codes for a buffer that is too small, a value that is out of range, and text that is not a number.
+====
+[source, c++]
+----
+include::example$charconv.cpp[]
+----
+
+Output:
+----
+=== to_chars ===
+uint256 max (decimal): 115792089237316195423570985008687907853269984665640564039457584007913129639935
+  characters written:  78
+uint256 (hex): 0xdeadbeefcafebabe123456780f1e2d3c4b5a69788796a5b4c3d2e1f0
+uint256 511 (octal): 0777
+uint256 max in base 2 is 256 characters
+to_chars into 10 chars: false (ec == value_too_large: true)
+
+=== from_chars ===
+Parsed the 78-digit max:
+  Result: 115792089237316195423570985008687907853269984665640564039457584007913129639935
+  Equals max? true
+  Consumed every character? true
+
+Parsed hex "DEADBEEFCAFEBABE123456780F1E2D3C4B5A69788796A5B4C3D2E1F0"
+  Result: 23450803645956985397271062114592904319886246494160595176910461526512
+  Round trips: true
+
+=== Error handling ===
+max + 1 parses: false (ec == result_out_of_range: true)
+"not a number" parses: false (ec == invalid_argument: true)
+"0x10" in base 16: value 0, stopped at 'x'
+----
+====
+
+[#examples_boost_container_hash]
+== Boost.ContainerHash and Boost.Unordered Integration
+
+.This https://github.com/cppalliance/int256/blob/develop/example/container_hash.cpp[example] demonstrates using `uint256` as a key in the Boost.Unordered containers, and combining two of them into a composite key with `boost::hash_combine`.
+====
+[source, c++]
+----
+include::example$container_hash.cpp[tags=**;!exclude]
+----
+
+Output:
+----
+=== boost::hash on uint256 ===
+boost::hash matches std::hash: true
+Reversed words hash differently: true
+
+=== boost::unordered_map<uint256, ...> ===
+Entries: 4
+Label at 2^128: two to the one hundred twenty-eighth
+Contains 42: true
+
+=== hash_combine for a composite key ===
+Points stored: 2
+Value at (10, 20): 5000000
+Same coordinate hashes equal: true
+
+=== boost::unordered_flat_map<uint256, ...> ===
+Flat map size: 3
+counts[max] = 3
+
+=== Using a 256-bit hash as a key ===
+Lookup by digest: the empty string
+Digest as an integer: 102987336249554097029535212322581322789799900648198034993379397001115665086549
+----
+====
+
+[#examples_to_string]
+== String Conversion (to_string)
+
+.This https://github.com/cppalliance/int256/blob/develop/example/to_string.cpp[example] demonstrates `to_string` and `to_wstring`, and that the result agrees with `std::to_string` wherever the value fits in 64 bits.
+====
+[source, c++]
+----
+include::example$to_string.cpp[]
+----
+
+Output:
+----
+=== to_string with uint256 ===
+to_string(1234567890):               1234567890
+std::to_string(uint64_t 1234567890): 1234567890
+Match: true
+
+to_string(UINT64_MAX):      18446744073709551615
+std::to_string(UINT64_MAX): 18446744073709551615
+Match: true
+
+=== Values beyond the 64-bit range ===
+2^64:  18446744073709551616
+2^128: 340282366920938463463374607431768211456
+2^192: 6277101735386680763835789423207666416102355444464034512896
+2^255: 57896044618658097711785492504343953926634992332820282019728792003956564819968
+uint256 max: 115792089237316195423570985008687907853269984665640564039457584007913129639935
+Digits in the max: 78
+
+=== Round trip through a literal ===
+Literal equals the max: true
+to_string of it round trips: true
+
+=== to_wstring ===
+to_wstring(1234567890) has 10 characters
+Same digits as to_string: true
+----
+====
+
+[#examples_fmt_format]
+== pass:[{fmt}] Integration
+
+.This https://github.com/cppalliance/int256/blob/develop/example/fmt_format.cpp[example] demonstrates the pass:[{fmt}] formatter: presentation types, the alternate form, sign options, and the fill, align and width specifiers.
+====
+[source, c++]
+----
+include::example$fmt_format.cpp[tags=**;!exclude]
+----
+
+Output:
+----
+=== Basic Formatting ===
+Default (decimal): 23450803645956985397271062114592904319886246494160595176910461526512
+Small value: 42
+
+=== Base Specifiers ===
+Binary:      11111111
+Octal:       377
+Decimal:     255
+Hexadecimal: ff
+Hex (upper): FF
+
+=== Alternate Form (Prefixes) ===
+Binary with prefix:  0b11111111
+Octal with prefix:   0377
+Hex with prefix:     0xff
+Hex upper prefix:    0XFF
+
+=== Sign Options ===
+Plus sign:  +255
+Minus only: 255
+Space sign:  255
+
+=== Zero Padding ===
+8-digit padding:  00000255
+16-digit padding: 0000000000000255
+
+=== Alignment ===
+Left align:   '255       '
+Right align:  '       255'
+Center align: '   255    '
+
+=== Alignment with Fill Characters ===
+Left with *:   '255*******'
+Right with 0:  '0000000255'
+Center with -: '---255----'
+
+=== Alignment with Hex and Prefix ===
+Right align hex:  '        ff'
+Left align hex:   'ff        '
+Center with prefix: '*****ff*****'
+
+=== Large Values ===
+uint256 max:       115792089237316195423570985008687907853269984665640564039457584007913129639935
+uint256 max (hex): 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff
+2^200:             1606938044258990275541962092341162602522202993782792835301376
+Padded to 80:  '                   1606938044258990275541962092341162602522202993782792835301376'
+Zero-filled:   '0000000000000100000000000000000000000000000000000000000000000000'
+
+=== Combined Format Specifiers ===
+Hex with prefix, uppercase, padded: 0X000000000000DEADBEEFCAFEBABE123456780F1E2D3C4B5A69788796A5B4C3D2E1F0
+Decimal with plus, padded: +0000000000023450803645956985397271062114592904319886246494160595176910461526512
+----
+====
+
+[#examples_std_format]
+== `<format>` Integration
+
+.This https://github.com/cppalliance/int256/blob/develop/example/format.cpp[example] demonstrates the same format specifiers through pass:[C++20] `std::format`, plus `formatted_size` and `format_to`.
+====
+[source, c++]
+----
+include::example$format.cpp[tags=**;!exclude]
+----
+
+Output:
+----
+=== Basic Formatting ===
+Default (decimal): 23450803645956985397271062114592904319886246494160595176910461526512
+Small value: 42
+
+=== Base Specifiers ===
+Binary:      11111111
+Octal:       377
+Decimal:     255
+Hexadecimal: ff
+Hex (upper): FF
+
+=== Alternate Form (Prefixes) ===
+Binary with prefix:  0b11111111
+Octal with prefix:   0377
+Hex with prefix:     0xff
+Hex upper prefix:    0XFF
+
+=== Sign Options ===
+Plus sign:  +255
+Minus only: 255
+Space sign:  255
+
+=== Zero Padding ===
+8-digit padding:  00000255
+16-digit padding: 0000000000000255
+
+=== Alignment ===
+Left align:   '255       '
+Right align:  '       255'
+Center align: '   255    '
+
+=== Alignment with Fill Characters ===
+Left with *:   '255*******'
+Right with 0:  '0000000255'
+Center with -: '---255----'
+
+=== Alignment with Hex and Prefix ===
+Right align hex:  '        ff'
+Left align hex:   'ff        '
+Center with prefix: '*****ff*****'
+
+=== Large Values ===
+uint256 max:       115792089237316195423570985008687907853269984665640564039457584007913129639935
+uint256 max (hex): 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff
+2^200:             1606938044258990275541962092341162602522202993782792835301376
+Padded to 80:  '                   1606938044258990275541962092341162602522202993782792835301376'
+Zero-filled:   '0000000000000100000000000000000000000000000000000000000000000000'
+
+=== Combined Format Specifiers ===
+Hex with prefix, uppercase, padded: 0X000000000000DEADBEEFCAFEBABE123456780F1E2D3C4B5A69788796A5B4C3D2E1F0
+Decimal with plus, padded: +0000000000023450803645956985397271062114592904319886246494160595176910461526512
+
+=== Formatting Into an Existing Buffer ===
+formatted_size: 66
+format_to:      0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff
+Lengths match:  true
+----
+====
+
+[#examples_cstdlib]
+== `<cstdlib>` support (Combined div and mod)
+
+.This https://github.com/cppalliance/int256/blob/develop/example/cstdlib.cpp[example] demonstrates `div`, which returns the quotient and the remainder of a single division.
+====
+[source, c++]
+----
+include::example$cstdlib.cpp[]
+----
+
+Output:
+----
+=== div() Function ===
+Returns both quotient and remainder from a single division
+
+--- One word divisor ---
+1000000000000000000 / 7 = 142857142857142857 remainder 1
+Verification: 142857142857142857 * 7 + 1 = 1000000000000000000
+
+--- Powers of two ---
+2^200 / 2^100 = 1267650600228229401496703205376 remainder 0
+
+--- Multi word divisor ---
+max / 340282366920938463500268095579187314691
+  quotient  = 340282366920938463426481119284349108225
+  remainder = 73786976294838206460
+  quot * divisor + rem == max: true
+
+--- Edge cases ---
+3 / 10 = 0 remainder 3
+100 / 25 = 4 remainder 0
+x / x = 1 remainder 0
+----
+====
+
+[#examples_cuda]
+== Use of the library in a CUDA kernel
+
+The type and most of the free functions are annotated to run on the device, so a kernel can use them the same way host code does.
+This example is the minimal shape of a device workload and a good starting template: allocate managed memory so one array serves both host and device, compute one `gcd` per thread, then recompute on the host and compare every element.
+
+.This https://github.com/cppalliance/int256/blob/develop/example/cuda.cu[example] demonstrates computing the GCD of 50000 pairs of `uint256` values in a CUDA kernel over managed memory, and checking every result against the same computation on the host.
+====
+[source, c++]
+----
+include::example$cuda.cu[]
+----
+
+Output:
+----
+[Vector operation on 50000 elements]
+CUDA kernel launch with 196 blocks of 256 threads
+All CPU and GPU computed elements match!
+----
+====
+
+The block count is `(50000 + 255) / 256`, so every line above is the same on any device.
+
+[#examples_sycl]
+== Use of the library in a SYCL kernel
+
+The same workload as the CUDA example above, expressed in SYCL with unified shared memory in place of managed allocations.
+The one difference in setup is that SYCL device support is opt-in rather than detected, so both the include order and the macro noted below are required: define `BOOST_INT256_ENABLE_SYCL` and include `<sycl/sycl.hpp>` before any Boost.Int256 header, then compile with `icpx -fsycl`.
+
+.This https://github.com/cppalliance/int256/blob/develop/example/sycl.cpp[example] demonstrates the same GCD computation in a SYCL kernel over unified shared memory, checked against the host.
+====
+[source, c++]
+----
+include::example$sycl.cpp[]
+----
+
+Output:
+----
+[Vector operation on 50000 elements]
+SYCL device: VirtualApple @ 2.50GHz
+All CPU and GPU computed elements match!
+----
+====
+
+The device line reports whichever device the SYCL runtime selected, so that one line differs from machine to machine.

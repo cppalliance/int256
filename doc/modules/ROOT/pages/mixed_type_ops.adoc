@@ -1,0 +1,246 @@
+////
+Copyright 2026 Matt Borland
+Distributed under the Boost Software License, Version 1.0.
+https://www.boost.org/LICENSE_1_0.txt
+////
+
+[#mixed_ops]
+= Mixed Type Operations
+:idprefix: mixed_ops_
+
+== Conversions
+
+The constructors from, and the conversion operators to, the built-in integer and floating-point types are all implicit, matching the built-in integer types.
+The single exception is `operator bool`, which is explicit.
+See xref:uint256.adoc#u256_constructors[Constructors] and xref:uint256.adoc#u256_conversions[Conversions].
+
+== Operator Overloads Across Types
+
+All comparison, arithmetic, bitwise, and shift operators are provided between `uint256` and any built-in integer type, signed or unsigned, including the compiler's `pass:[__int128]` and `pass:[unsigned __int128]` where those exist (and `std::_Signed128` / `std::_Unsigned128` on MSVC in pass:[C++20] mode).
+
+The compound assignment operators are provided in both operand orders, so a built-in integer accepts a `uint256` right operand as well; see xref:mixed_type_ops.adoc#mixed_ops_integer_compound[Compound Assignment onto a Built-in Integer] below.
+
+Additionally, the operators that the built-in integers allow with a floating-point operand are provided between `uint256` and `float`, `double`, and `long double`; see xref:mixed_type_ops.adoc#mixed_ops_floating_point[Operations With Floating-Point Types] below.
+
+The behavior and return type of every mixed overload follow the pass:[C++] usual arithmetic conversions, identical to what the equivalent built-in unsigned operation would produce at 256 bits, including two's-complement wrap-around semantics.
+
+=== Result Type Rules
+
+[cols="3,2,3", options="header"]
+|===
+| Operands | Common type | Result of arithmetic / bitwise
+
+| `uint256` and a signed built-in (`int8_t` to `int64_t`, or `pass:[__int128]`)
+| `uint256`
+| `uint256`
+
+| `uint256` and an unsigned built-in (`uint8_t` to `uint64_t`, or `pass:[unsigned __int128]`)
+| `uint256`
+| `uint256`
+
+| `uint256` and `float`
+| `float`
+| `float`
+
+| `uint256` and `double`
+| `double`
+| `double`
+
+| `uint256` and `long double`
+| `long double`
+| `long double`
+|===
+
+A signed operand is converted to `uint256` first, which sign-extends a negative value into all four words, so `pass:[uint256{3} - -1]` is `4` and `pass:[uint256{3} > -1]` is `false`.
+That is what the built-in unsigned types do with a negative operand; use the xref:utilities.adoc#comparison[`cmp_*` family] when the mathematical answer is wanted.
+
+For shift operators (`pass:[<<]`, `pass:[>>]`), the result type follows the left operand after integral promotion, regardless of the right operand, matching the built-in shift rules.
+`uint256` is not promoted, so a `uint256` left operand yields itself.
+A built-in left operand of lesser rank than `int` promotes, and does so whether or not it is signed, so `bool`, `unsigned char`, and `unsigned short` all yield a signed `int`.
+A shift count that is negative or greater than or equal to the width of the shifted operand, which is `256` when the left operand is a `uint256`, is undefined behavior, exactly as for the built-in shift operators; see the xref:uint256.adoc#u256_bitwise_operators[shift operator] reference for the precise rules.
+
+For comparison operators (`pass:[==]`, `pass:[!=]`, `pass:[<]`, `pass:[<=]`, `pass:[>]`, `pass:[>=]`), the return type is always `bool` and the comparison is performed on the operands after they have been converted to the common type above.
+
+=== Operations with built-in `pass:[__int128]` / `pass:[unsigned __int128]`
+
+When the compiler provides 128-bit built-in integer types, every operator above is also available with one of them as an operand, in either order.
+The 128-bit operand is converted to `uint256` first (sign-extended when it is the signed type), so the result type follows the same rules as the table above: `uint256` for arithmetic and bitwise, the left operand for shifts, `bool` for comparisons.
+
+These overloads are declared `BOOST_INT256_BUILTIN_CONSTEXPR` rather than plain `constexpr`, because the MSVC simulated 128-bit types are not usable in a constant expression before Visual Studio 14.45.
+They disappear entirely under xref:config.adoc#no_int128[`BOOST_INT256_NO_BUILTIN_INT128`].
+
+NOTE: The compiler's 128-bit type is used as a wide intermediate inside the library, never as storage. A `uint256` always holds four 64-bit words, so results do not depend on whether these overloads exist.
+
+[#mixed_ops_integer_compound]
+== Compound Assignment onto a Built-in Integer
+
+Every compound assignment operator is available with a built-in integer on the left and `uint256` on the right:
+
+[source, c++]
+----
+using boost::int256::uint256;
+
+unsigned flags {0};
+flags |= uint256{1U};      // 1, and flags is still unsigned
+
+int counter {12};
+counter += uint256{5U};    // 17
+----
+
+`i op= v` is equivalent to `i = static_cast<decltype(i)>(i op v)` using the binary operator from the table above, which is what the built-in integers do.
+The whole operation is performed in the common type of the two operands and only the result is converted back, so a right operand wider than the left operand is never truncated first:
+
+[source, c++]
+----
+std::uint32_t word {0};
+word += (uint256{1U} << 64U) + uint256{7U};   // 7, the low word of 2^64 + 7
+
+std::uint64_t big {8};
+big /= uint256{1U} << 64U;                    // 0, because 8 / 2^64 is zero
+----
+
+The left operand keeps its own type, so a result outside its range wraps exactly as the built-in wraps.
+The shift operators are the exception the language makes for all integer types: they take the value and the result type from the left operand alone, and only the count from the right.
+
+[source, c++]
+----
+std::uint64_t bits {1};
+bits <<= uint256{40U};     // 2^40, a 64-bit shift by a count of 40
+----
+
+=== Available Types and Operators
+
+`Integer` is any built-in integer type, signed or unsigned, from `bool` through `pass:[long long]`, including the compiler's `pass:[__int128]` and `pass:[unsigned __int128]` where supported.
+
+[source, c++]
+----
+namespace boost {
+namespace int256 {
+
+template <BOOST_INT256_INTEGER_CONCEPT Integer>
+BOOST_INT256_HOST_DEVICE constexpr Integer& operator|=(Integer& lhs, const uint256& rhs);
+// and likewise for &=, ^=, +=, -=, *=, /=, %=, <<=, >>=
+
+} // namespace int256
+} // namespace boost
+----
+
+A division or remainder by zero, and a shift count that is negative or at least the width of the promoted left operand, are undefined, exactly as for the built-in operators.
+
+[#mixed_ops_floating_point]
+== Operations With Floating-Point Types
+
+`uint256` supports exactly the operators that the built-in integers support with a floating-point operand, in either operand order, for `float`, `double`, and `long double`.
+
+The rule is the pass:[C++] usual arithmetic conversions: the 256-bit operand is converted to the floating-point type *first*, and the operation is then performed entirely in that floating-point type.
+The result type is the floating-point type, never `uint256`.
+
+[source, c++]
+----
+boost::int256::uint256 u {5U};
+
+auto a = u + 1.0;      // double, 6.0
+auto b = 1.0F - u;     // float, -4.0F
+auto c = u * 0.5;      // double, 2.5   (the operand is NOT truncated to 0 first)
+bool d = u < 5.5;      // true
+----
+
+Because the conversion happens before the operation, and because it is rounded once, to nearest with ties to even, every result is what the corresponding built-in expression would produce.
+That holds on every platform and in either builtin configuration: the conversion is implemented in the library, so it does not depend on the compiler having a wide integer type.
+
+=== Available Operators
+
+[source, c++]
+----
+namespace boost {
+namespace int256 {
+
+// Float is float, double, or long double.
+
+//=====================================
+// Arithmetic Operators
+//=====================================
+
+template <BOOST_INT256_FLOATING_POINT_CONCEPT Float>
+BOOST_INT256_HOST_DEVICE constexpr Float operator+(const uint256& lhs, Float rhs);
+template <BOOST_INT256_FLOATING_POINT_CONCEPT Float>
+BOOST_INT256_HOST_DEVICE constexpr Float operator+(Float lhs, const uint256& rhs);
+// and likewise for -, *, /
+
+//=====================================
+// Comparison Operators
+//=====================================
+
+template <BOOST_INT256_FLOATING_POINT_CONCEPT Float>
+BOOST_INT256_HOST_DEVICE constexpr bool operator==(const uint256& lhs, Float rhs);
+template <BOOST_INT256_FLOATING_POINT_CONCEPT Float>
+BOOST_INT256_HOST_DEVICE constexpr bool operator==(Float lhs, const uint256& rhs);
+// and likewise for !=, <, <=, >, >=
+
+// Requires C++20. A mixed integer and floating-point comparison is a partial
+// ordering, because a NaN operand is unordered with respect to every value
+template <BOOST_INT256_FLOATING_POINT_CONCEPT Float>
+BOOST_INT256_HOST_DEVICE constexpr std::partial_ordering operator<=>(const uint256& lhs, Float rhs);
+template <BOOST_INT256_FLOATING_POINT_CONCEPT Float>
+BOOST_INT256_HOST_DEVICE constexpr std::partial_ordering operator<=>(Float lhs, const uint256& rhs);
+
+//=====================================
+// Compound Assignment
+//=====================================
+
+template <BOOST_INT256_FLOATING_POINT_CONCEPT Float>
+BOOST_INT256_HOST_DEVICE constexpr uint256& uint256::operator+=(Float rhs);
+// and likewise for -=, *=, /=
+
+template <BOOST_INT256_FLOATING_POINT_CONCEPT Float>
+BOOST_INT256_HOST_DEVICE constexpr Float& operator+=(Float& lhs, const uint256& rhs);
+// and likewise for -=, *=, /=
+
+} // namespace int256
+} // namespace boost
+----
+
+=== Compound Assignment
+
+`u op= f` where `u` is a `uint256` and `f` is floating-point is equivalent to `u = static_cast<uint256>(static_cast<Float>(u) op f)`, matching the built-in.
+The whole operation is performed in floating point and only the final result is converted back, truncating toward zero:
+
+[source, c++]
+----
+boost::int256::uint256 u {4U};
+u *= 2.5;              // 10, not 8: the operand is not truncated first
+----
+
+Where the built-in would be undefined, that is when the floating-point result is negative, is NaN, or is above the range of the type, the library saturates instead, exactly as the xref:uint256.adoc#u256_constructors[floating-point constructor] does.
+
+`f op= u` where `f` is floating-point keeps the type of `f` and is equivalent to `f op= static_cast<Float>(u)`.
+
+=== Operators Not Provided
+
+The built-in integers do not accept a floating-point operand for the modulo, bitwise, or shift operators, so neither does `uint256`.
+The following are declared as deleted, which makes them a compile error rather than silently converting the floating-point operand:
+
+* `pass:[%]`, `pass:[&]`, `pass:[|]`, `pass:[^]`, `pass:[<<]`, `pass:[>>]` in either operand order,
+* `pass:[%=]`, `pass:[&=]`, `pass:[|=]`, `pass:[^=]`, `pass:[<<=]`, `pass:[>>=]` with a floating-point right operand.
+
+=== Precision of Comparisons
+
+A comparison converts the 256-bit operand to the floating-point type before comparing, so it is only as precise as that type.
+This is the behavior of the built-in integers, but it matters far more at this width, since a 256-bit value needs far more bits than even a `long double` significand holds:
+
+[source, c++]
+----
+using boost::int256::uint256;
+
+const uint256 v {(uint256{1U} << 200U) + uint256{1U}};  // 2^200 + 1
+
+v == 1.6069380442589903e60;   // true: v rounds to 2^200 as a double
+----
+
+For a comparison that is exact for every value, use the xref:utilities.adoc#comparison[integer comparison functions] `cmp_equal`, `cmp_less`, and friends with an integer operand instead.
+
+=== Limitations
+
+* `pass:[__float128]` is not supported, even on the platforms where the compiler provides it. Only `float`, `double`, and `long double` participate.
+* `long double` is unavailable on the CUDA and SYCL device, so the `long double` overloads are not declared when `BOOST_INT256_HAS_GPU_SUPPORT` is defined, matching the xref:uint256.adoc#u256_conversions[conversion operators].
+* On a platform whose `long double` is IBM double-double, currently ppc64le, `long double` results are reproducible but not bitwise reproducible: that format is not canonical and its arithmetic is not correctly rounded, so two expressions computing the same product can differ in the last bits. `float` and `double` are unaffected, and so is every other `long double` format.

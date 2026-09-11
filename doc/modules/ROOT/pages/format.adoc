@@ -1,0 +1,113 @@
+////
+Copyright 2026 Matt Borland
+Distributed under the Boost Software License, Version 1.0.
+https://www.boost.org/LICENSE_1_0.txt
+////
+
+[#format]
+= Formatting Support
+:idprefix: format_
+
+Boost.Int256 supports formatting with both `<format>` (when pass:[C++20] and the header are both available), and `pass:[<fmt/format.h>]`.
+The following modifiers are listed in the order in which they must be specified in the format string to be valid, and all information applies to both `<format>` and `pass:[<fmt/format.h>]`.
+
+== Fill and Alignment
+
+You can specify alignment with an optional fill character. The format is `[[fill]align]` where:
+
+[options="header"]
+|===
+| Alignment | Effect
+| `<`       | Left-aligns the value within the available space
+| `>`       | Right-aligns the value within the available space
+| `^`       | Centers the value within the available space
+|===
+
+The optional fill character (default is space) appears before the alignment character.
+
+Examples:
+[options="header"]
+|===
+| Format    | Output for 42
+| `{:<6d}`  | `"42    "` (left-aligned with spaces)
+| `{:>6d}`  | `"    42"` (right-aligned with spaces)
+| `{:^6d}`  | `"  42  "` (centered with spaces)
+| `{:*<6d}` | `"42****"` (left-aligned with asterisks)
+| `{:0>6d}` | `"000042"` (right-aligned with zeros)
+| `{:*^6d}` | `"**42**"` (centered with asterisks)
+|===
+
+NOTE: When no alignment is specified but a `0` prefix and width are given (for example `{:06d}`), zero-padding is applied from the left. Without the `0` prefix (for example `{:6d}`), space-padding is applied instead, matching `std::format` behavior.
+
+== Sign
+
+There are three allowable signs first in the format string:
+
+[options="header"]
+|===
+| Sign      | Effect
+| `+`       | Adds a `+` to the value
+| `-`       | Adds nothing, since a `uint256` is never negative
+| pass:[` `] (Space)       | Adds a ` ` to the value. Preserves alignment
+|===
+
+== Prepend Prefix
+
+If you want to prepend the prefix to your number (if applicable) add `#`
+
+[options="header"]
+|===
+| Output Base   | Effect
+| Binary        | `0b` or `0B`
+| Octal         | `0`
+| Decimal       | None
+| Hex           | `0x` or `0X`
+|===
+
+== Padding
+
+You can then add any number of padding characters to make sure that a formatted value takes up a specified width (5 means a minimum width of 5 characters and so on).
+Any integer value is accepted here.
+The widths worth remembering for this type are 78 for the longest decimal value and 64 for the longest hexadecimal one.
+
+== Output Base Modifiers
+
+The following type modifiers are the same as those used by built-in integer values.
+
+[options="header"]
+|===
+| Modifier  | Format
+| b, B      | Binary
+| o         | Octal
+| d         | Decimal
+| x, X      | Hex
+|===
+
+NOTE: When the uppercase modifier is used, all characters will be capitalized (for example 0x2a versus 0X2A).
+
+== Default
+
+The default format string `{}` will output the same as `{:-d}`, that is a decimal value.
+
+[#fmt_format]
+== `pass:[{fmt}]`
+
+To use the `pass:[{fmt}]` library, include `<boost/int256/fmt_format.hpp>` and `<fmt/format.h>`.
+The format specifiers described above work with `fmt::format`.
+`BOOST_INT256_HAS_FMT_FORMAT` reports whether the pass:[{fmt}] headers were found; the header is a no-op when they were not, so it is safe to include unconditionally.
+
+See the xref:examples.adoc#examples_fmt_format[pass:[{fmt}] formatting example] for a complete demonstration of these features.
+
+[#std_format]
+== `<format>`
+
+To use `std::format`, include `<boost/int256/format.hpp>` and `<format>`.
+The format specifiers described above work with `std::format`.
+`std::format_to` and `std::formatted_size` work as well, since the formatter writes through the output iterator it is given.
+If you are using `std::format` with pass:[C++26] or newer, `constexpr std::format` is supported, and `BOOST_INT256_HAS_CONSTEXPR_FORMAT` reports it.
+`BOOST_INT256_HAS_FORMAT` reports whether pass:[C++20] `<format>` was available at all.
+
+Both formatters are host only.
+
+See the xref:examples.adoc#examples_std_format[`<format>` formatting example] for a complete demonstration.
+It is the same program as the pass:[{fmt}] example with `fmt::` replaced by `std::`, and the output of the two is identical.

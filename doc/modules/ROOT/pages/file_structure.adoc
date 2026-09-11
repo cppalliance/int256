@@ -1,0 +1,94 @@
+////
+Copyright 2026 Matt Borland
+Distributed under the Boost Software License, Version 1.0.
+https://www.boost.org/LICENSE_1_0.txt
+////
+
+
+[#structure]
+= Directory Structure
+:idprefix: structure_
+
+The entire library can be consumed via `<boost/int256.hpp>`, or by independently selecting any of the library headers.
+
+[cols="1,2", options="header"]
+|===
+| Header | Description
+
+| xref:getting_started.adoc[`<boost/int256.hpp>`]
+| Convenience header (includes most headers below; does not include `charconv.hpp`, `fmt_format.hpp`, or `random.hpp`)
+
+| xref:bit.adoc[`<boost/int256/bit.hpp>`]
+| Bit manipulation functions
+
+| xref:byte_conversions.adoc[`<boost/int256/byte_conversions.hpp>`]
+| Big-endian and little-endian byte order conversions
+
+| xref:charconv.adoc[`<boost/int256/charconv.hpp>`]
+| Character conversion (`to_chars`/`from_chars`); requires Boost.Charconv headers
+
+| xref:api_reference.adoc#api_macro_literals[`<boost/int256/climits.hpp>`]
+| C-style limit macros (`BOOST_INT256_UINT256_MAX`)
+
+| xref:cstdlib.adoc[`<boost/int256/cstdlib.hpp>`]
+| Division with quotient and remainder (`div`)
+
+| xref:format.adoc[`<boost/int256/fmt_format.hpp>`]
+| `pass:[{fmt}]` library support; requires the `pass:[{fmt}]` library
+
+| xref:format.adoc[`<boost/int256/format.hpp>`]
+| C++20 `std::format` support
+
+| xref:hash.adoc[`<boost/int256/hash.hpp>`]
+| `std::hash` specialization for `uint256`
+
+| xref:api_reference.adoc#api_types[`<boost/int256/int256.hpp>`]
+| Core type definition (xref:uint256.adoc[`uint256`])
+
+| xref:stream.adoc[`<boost/int256/iostream.hpp>`]
+| Stream insertion/extraction operators
+
+| xref:api_reference.adoc#api_structs[`<boost/int256/limits.hpp>`]
+| `std::numeric_limits` specialization
+
+| xref:literals.adoc[`<boost/int256/literals.hpp>`]
+| User-defined literals (`_u256`, `_U256`)
+
+| xref:numeric.adoc[`<boost/int256/numeric.hpp>`]
+| Numeric functions (`gcd`, `lcm`, saturating arithmetic, integer division)
+
+| xref:random.adoc[`<boost/int256/random.hpp>`]
+| Traits for usage with Boost.Random
+
+| xref:string.adoc[`<boost/int256/string.hpp>`]
+| `to_string` overloads
+
+| xref:utilities.adoc[`<boost/int256/utilities.hpp>`]
+| Modular arithmetic, integer power, integer square root, checked arithmetic, and signedness-safe comparisons
+|===
+
+The implementation lives under `include/boost/int256/detail/` and is not part of the public interface.
+The remaining top-level directories of the repository are:
+
+[cols="1,2", options="header"]
+|===
+| Directory | Contents
+
+| `doc/`
+| This documentation (Antora)
+
+| `example/`
+| The programs shown in xref:examples.adoc[Examples], each built and run as a test
+
+| `extra/`
+| The amalgamation script, the generated single header, and the xref:printer.adoc[debugger pretty printers]
+
+| `module/`
+| The pass:[C++20] module interface unit `int256.cppm` and its build files
+
+| `ports/`
+| The vcpkg port
+
+| `test/`
+| The test suite, including the CUDA and SYCL suites, the compile-fail tests, the fuzzing harnesses, and the benchmarks
+|===

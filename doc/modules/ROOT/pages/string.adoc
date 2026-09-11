@@ -1,0 +1,42 @@
+////
+Copyright 2026 Matt Borland
+Distributed under the Boost Software License, Version 1.0.
+https://www.boost.org/LICENSE_1_0.txt
+////
+
+[#String]
+= `<string>` Support
+:idprefix: string_
+
+[source,c++]
+----
+#include <boost/int256/string.hpp>
+----
+
+The following are functions analogous to those found in `<string>` for the built-in integer types.
+
+[source,c++]
+----
+#include <boost/int256/string.hpp>
+
+namespace boost {
+namespace int256 {
+
+// Constrained to T being uint256.
+template <typename T>
+std::enable_if_t<std::is_same<T, uint256>::value, std::string>
+to_string(const T& value);
+
+// Constrained to T being uint256.
+template <typename T>
+std::enable_if_t<std::is_same<T, uint256>::value, std::wstring>
+to_wstring(const T& value);
+
+} // namespace int256
+} // namespace boost
+----
+
+`to_string` returns a `std::string`, and `to_wstring` returns a `std::wstring`, containing the decimal (base 10) representation of `value`, which is at most 78 characters long.
+These functions may throw `std::bad_alloc` from the constructor of the returned string, and are host-only for that reason.
+
+An example of how to use these functions is available xref:examples.adoc#examples_to_string[on the examples page].

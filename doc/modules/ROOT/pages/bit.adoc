@@ -1,0 +1,223 @@
+////
+Copyright 2026 Matt Borland
+Distributed under the Boost Software License, Version 1.0.
+https://www.boost.org/LICENSE_1_0.txt
+////
+
+[#Bit]
+= `<bit>` Support
+:idprefix: bit_
+
+[source,c++]
+----
+#include <boost/int256/bit.hpp>
+----
+
+The following are functions analogous to those found in the pass:[C++20] https://en.cppreference.com/w/cpp/header/bit[<bit>] header, but for `boost::int256::uint256`.
+None of these functions apply to signed integral types.
+All of them are `constexpr` and available using pass:[C++14] like the rest of the library, and all of them operate over the full 256 bits, so a bit set in the most significant word is 192 bits from the least significant end.
+
+[#has_single_bit]
+== has_single_bit
+
+Checks if `x` is an integral power of two.
+Returns `true` if `x` is a power of two; otherwise `false`.
+
+[source,c++]
+----
+namespace boost {
+namespace int256 {
+
+BOOST_INT256_HOST_DEVICE constexpr bool has_single_bit(const uint256& x) noexcept;
+
+} // namespace int256
+} // namespace boost
+----
+
+[#countl_zero]
+== countl_zero
+
+Returns the number of consecutive `0` bits in the value `x`, starting from the most significant.
+For `x == 0` the result is 256, and for `x == 1` it is 255.
+
+[source,c++]
+----
+namespace boost {
+namespace int256 {
+
+BOOST_INT256_HOST_DEVICE constexpr int countl_zero(const uint256& x) noexcept;
+
+} // namespace int256
+} // namespace boost
+----
+
+[#countl_one]
+== countl_one
+
+Returns the number of consecutive `1` bits in the value `x`, starting from the most significant.
+
+[source,c++]
+----
+namespace boost {
+namespace int256 {
+
+BOOST_INT256_HOST_DEVICE constexpr int countl_one(const uint256& x) noexcept;
+
+} // namespace int256
+} // namespace boost
+----
+
+[#bit_width]
+== bit_width
+
+If `x` is not zero, returns the number of bits needed to store the value `x`, which is at most 256.
+If `x` is zero, returns 0.
+
+[source,c++]
+----
+namespace boost {
+namespace int256 {
+
+BOOST_INT256_HOST_DEVICE constexpr int bit_width(const uint256& x) noexcept;
+
+} // namespace int256
+} // namespace boost
+----
+
+[#bit_ceil]
+== bit_ceil
+
+Returns the smallest integral power of two that is not smaller than `x`.
+As for the standard function, the behavior is undefined when the result is not representable, that is when `x` is greater than 2^255^.
+
+[source, c++]
+----
+namespace boost {
+namespace int256 {
+
+BOOST_INT256_HOST_DEVICE constexpr uint256 bit_ceil(const uint256& x) noexcept;
+
+} // namespace int256
+} // namespace boost
+----
+
+[#bit_floor]
+== bit_floor
+
+Returns the largest integral power of two that is not greater than `x`.
+If `x` is 0 then returns 0.
+
+[source, c++]
+----
+namespace boost {
+namespace int256 {
+
+BOOST_INT256_HOST_DEVICE constexpr uint256 bit_floor(const uint256& x) noexcept;
+
+} // namespace int256
+} // namespace boost
+----
+
+[#countr_zero]
+== countr_zero
+
+Returns the number of consecutive `0` bits in the value `x`, starting from the least significant.
+For `x == 0` the result is 256.
+
+[source,c++]
+----
+namespace boost {
+namespace int256 {
+
+BOOST_INT256_HOST_DEVICE constexpr int countr_zero(const uint256& x) noexcept;
+
+} // namespace int256
+} // namespace boost
+----
+
+[#countr_one]
+== countr_one
+
+Returns the number of consecutive `1` bits in the value `x`, starting from the least significant.
+
+[source,c++]
+----
+namespace boost {
+namespace int256 {
+
+BOOST_INT256_HOST_DEVICE constexpr int countr_one(const uint256& x) noexcept;
+
+} // namespace int256
+} // namespace boost
+----
+
+[#rotl]
+== rotl
+
+Computes the result of bitwise left-rotating the value of `x` by `s` positions.
+This operation is also known as a left circular shift.
+The count is taken modulo 256, and a negative count rotates in the other direction, so `rotl(x, 256) == x` and `rotl(x, -1) == rotr(x, 1)`.
+
+[source,c++]
+----
+namespace boost {
+namespace int256 {
+
+BOOST_INT256_HOST_DEVICE constexpr uint256 rotl(const uint256& x, int s) noexcept;
+
+} // namespace int256
+} // namespace boost
+----
+
+[#rotr]
+== rotr
+
+Computes the result of bitwise right-rotating the value of `x` by `s` positions.
+This operation is also known as a right circular shift.
+The count is handled as for `rotl`.
+
+[source,c++]
+----
+namespace boost {
+namespace int256 {
+
+BOOST_INT256_HOST_DEVICE constexpr uint256 rotr(const uint256& x, int s) noexcept;
+
+} // namespace int256
+} // namespace boost
+----
+
+[#popcount]
+== popcount
+
+Returns the number of `1` bits in `x`, which is at most 256.
+
+[source,c++]
+----
+namespace boost {
+namespace int256 {
+
+BOOST_INT256_HOST_DEVICE constexpr int popcount(const uint256& x) noexcept;
+
+} // namespace int256
+} // namespace boost
+----
+
+[#byteswap]
+== byteswap
+
+Reverses the 32 bytes of the given value `x`, so the words swap places and each one is individually byte reversed.
+Unlike xref:byte_conversions.adoc[the byte order conversions], this is a pure value transformation and does not depend on the host byte order.
+
+[source,c++]
+----
+namespace boost {
+namespace int256 {
+
+BOOST_INT256_HOST_DEVICE constexpr uint256 byteswap(const uint256& x) noexcept;
+
+} // namespace int256
+} // namespace boost
+----
+
+See the xref:examples.adoc#examples_bit[bit manipulation example] for a program that exercises all of these.

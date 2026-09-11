@@ -1,0 +1,60 @@
+////
+Copyright 2026 Matt Borland
+Distributed under the Boost Software License, Version 1.0.
+https://www.boost.org/LICENSE_1_0.txt
+////
+
+[#u256_benchmarks]
+= `uint256` Benchmarks
+:idprefix: u256_benchmarks_
+
+== Methodology
+
+Every cell below is the total time in microseconds that one operation takes over a whole vector of random values, so lower is better.
+The vector holds operands of random width (64, 128, 192, or 256 bits, that is one to four significant words), each operation is evaluated as `op(vec[i], vec[i + 1])` across the vector, and the whole vector is walked several times.
+Each platform states its element count and pass count, and therefore how many operations a cell covers.
+The `Comparisons` row is the total of all six relational operators (`==`, `!=`, `<`, `<=`, `>`, `>=`) over that same vector, which is why it costs roughly six arithmetic rows.
+
+No platform has a hardware 256-bit integer, so there is no builtin reference to compare against.
+The baseline is `boost::multiprecision::uint256_t` (abbreviated as `boost::mp::uint256` in the tables), which is widely used and portable, and is also the oracle the library's differential tests use.
+Where `math::wide_integer::uintwide_t<256>` is present on the build machine it is measured as a second comparison.
+There is no 256-bit type in Abseil, so unlike the Boost.Int128 benchmarks there is no Abseil column.
+
+NOTE: Each platform reports a single run, several of them from shared CI runners, so treat small differences as noise.
+
+[#u256_benchmarks_running]
+== Running the Benchmarks
+
+The driver is `test/benchmark_u256.cpp`. From a Boost tree with its headers staged (`b2 headers`), build it in release mode and pass `--json` to have it write out a data set:
+
+[source, shell]
+----
+g++ -std=c++20 -O2 -DNDEBUG -I . libs/int256/test/benchmark_u256.cpp -o benchmark_u256
+./benchmark_u256 --json u256.json
+----
+
+Timings are printed to stderr as they are measured, so a run is readable without the data set.
+`--elements` and `--repetitions` shrink the run, which is what the emulated platforms use.
+
+From the root of a Boost tree, `.github/scripts/run_benchmarks.sh --compiler g++ --out <dir>` builds and runs the driver exactly as CI does and leaves a complete data set folder behind. It takes its include path from the checked out libraries, so it needs no staged headers.
+
+The `benchmarks.yml` workflow runs the driver on every platform documented here and uploads one `benchmarks-<os>-<arch>` artifact per platform.
+It runs on every pull request, and each job's summary compares its fresh numbers against the published ones, so a regression is visible without downloading anything.
+To refresh this page, unpack those artifacts into `doc/modules/ROOT/data` and run `doc/render_benchmarks.py`, which rewrites every table and plot below from the data sets.
+
+// BENCHMARK-RESULTS-GENERATED
+
+[#u256_linux]
+== Linux
+
+Numbers are published here once the `benchmarks.yml` workflow has run and its artifacts have been rendered by `doc/render_benchmarks.py`.
+
+[#u256_windows]
+== Windows
+
+Numbers are published here once the `benchmarks.yml` workflow has run and its artifacts have been rendered by `doc/render_benchmarks.py`.
+
+[#u256_mac]
+== macOS
+
+Numbers are published here once the `benchmarks.yml` workflow has run and its artifacts have been rendered by `doc/render_benchmarks.py`.

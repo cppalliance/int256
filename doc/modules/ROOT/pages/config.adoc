@@ -1,0 +1,123 @@
+////
+Copyright 2026 Matt Borland
+Distributed under the Boost Software License, Version 1.0.
+https://www.boost.org/LICENSE_1_0.txt
+////
+
+[#configuration]
+= Configuration Macros
+:idprefix: config_
+
+The configuration macros below are defined automatically once any library header (for example `<boost/int256.hpp>`) is included; there is no separate configuration header to include directly.
+
+== User Configurable Macros
+
+These macros allow customization of library behavior. User-configurable macros should be defined before including any library headers.
+
+[#enable_cuda]
+- `BOOST_INT256_ENABLE_CUDA`: Defining this macro allows both the type and selected functions to be run on both host and device when compiling with NVCC.
+Allowed functions have `BOOST_INT256_HOST_DEVICE` as part of their function signature in their documentation.
++
+[source, bash]
+----
+nvcc -std=c++14 --expt-relaxed-constexpr -DBOOST_INT256_ENABLE_CUDA=1 my_kernel.cu
+----
++
+See the xref:examples.adoc#examples_cuda[CUDA example] for a complete kernel.
+
+[#enable_sycl]
+- `BOOST_INT256_ENABLE_SYCL`: Defining this macro allows both the type and selected functions to be run on the device when compiling with a SYCL compiler (for example Intel oneAPI `icpx -fsycl`).
+Unlike CUDA, SYCL device support is opt-in and is not detected automatically, so this macro must be defined and `<sycl/sycl.hpp>` must be included before any Boost.Int256 header (so that `SYCL_EXTERNAL` is available).
+Device-enabled functions have `BOOST_INT256_HOST_DEVICE` as part of their function signature in their documentation.
+The `boost::charconv::to_chars` / `from_chars` overloads in `<boost/int256/charconv.hpp>` also run on the SYCL device: defining `BOOST_INT256_ENABLE_SYCL` forwards to `BOOST_CHARCONV_ENABLE_SYCL`, and Boost.Charconv provides matching SYCL device support (as it does for CUDA).
++
+The include order matters, so it is worth writing out:
++
+[source, c++]
+----
+#include <sycl/sycl.hpp>   // must precede any Boost.Int256 header
+#include <boost/int256.hpp>
+----
++
+[source, bash]
+----
+icpx -fsycl -std=c++17 -DBOOST_INT256_ENABLE_SYCL=1 my_program.cpp
+----
++
+See the xref:examples.adoc#examples_sycl[SYCL example] for a complete kernel.
+
+[#no_int128]
+- `BOOST_INT256_NO_BUILTIN_INT128`: The user may define this when they do not want the internal implementations to use the compiler's builtin `pass:[__int128]` or `pass:[unsigned __int128]` as an intermediate type.
+It also removes the constructors, conversion operators, and mixed-type operators that take a builtin 128-bit operand.
+The definition must precede the first library header, otherwise the builtin path will already have been selected:
++
+[source, c++]
+----
+#define BOOST_INT256_NO_BUILTIN_INT128
+#include <boost/int256.hpp>   // uses only the portable four-word implementation
+----
++
+The builtin type is never the storage representation, so this macro changes performance and the available overload set, never the value of a result.
+
+[#no_simd]
+- `BOOST_INT256_NO_SIMD`: The user may define this to disable the SSE2 and AVX2 equality paths and leave only the portable word-by-word comparison.
+As with the macro above, results are unaffected.
+
+[#disable_exceptions]
+- `BOOST_INT256_DISABLE_EXCEPTIONS`: Allows exceptions to be disabled.
+This macro will automatically be defined in the presence of `-fno-exceptions` or similar MSVC flags.
+
+[#build_module]
+- `BOOST_INT256_BUILD_MODULE`: Define this when building the library as a pass:[C++20] named module (consumed via `import boost.int256`).
+It switches the headers into module mode by exporting the public interface and suppressing the includes that the module unit itself provides.
++
+`module/int256.cppm` defines the macro itself, so importing the built module needs nothing further:
++
+[source, c++]
+----
+import boost.int256;   // consumers need no macro of their own
+----
++
+Define it directly only in a translation unit that has to switch between including the headers and importing the module.
+See xref:getting_started.adoc[Getting Started] for how to build the interface unit.
++
+Two further macros are meaningful only inside the module interface unit itself: `BOOST_INT256_USE_STD_MODULE` makes it use `import std;` instead of including the standard headers in its global module fragment, and `BOOST_INT256_EXPORT_TESTING` additionally exports the `detail` namespace so that the library's own tests can be built against the module.
+
+[#automatic_config]
+== Automatic Configuration Macros
+
+These macros are defined by the library itself and are intended to be tested, not set.
+They are most useful for writing code that has to adapt to what the platform provides:
+
+[source, c++]
+----
+#include <boost/int256.hpp>
+
+#ifdef BOOST_INT256_HAS_INT128
+// A builtin 128-bit type exists and is used for the wide intermediates
+#endif
+
+#if BOOST_INT256_ENDIAN_BIG_BYTE
+// Each of the four words is stored most significant byte first
+#endif
+----
+
+- `BOOST_INT256_HAS_INT128`: This is defined when compiling on a platform that has builtin `pass:[__int128]` or `pass:[unsigned __int128]` types (e.g. `pass:[__x86_64__]`), and not user disabled by `BOOST_INT256_NO_BUILTIN_INT128`. When defined, `uint256` has constructors, conversion operators, and mixed-type operators for those types, and the internal 64x64 and 128 by 64 bit steps use them.
+
+- `BOOST_INT256_ENDIAN_LITTLE_BYTE`: This is defined to `1` when compiling on a little endian architecture, otherwise `0`. Note that this describes the byte order inside each of the four words; the order of the words themselves is fixed, with `words[0]` least significant, on every platform.
+
+- `BOOST_INT256_ENDIAN_BIG_BYTE`: This is defined to `1` when compiling on a big endian architecture, otherwise `0`.
+
+- `BOOST_INT256_HAS_MSVC_INT128`: This is defined when the MSVC standard library provides the simulated 128-bit integer types in `pass:[<__msvc_int128.hpp>]` (MSVC in pass:[C++20] mode). When defined, `uint256` provides the same 128-bit interoperability against those types that it provides against the builtin ones.
+
+- `BOOST_INT256_HAS_GPU_SUPPORT`: This is defined when the library is compiled with device support enabled, that is under either `BOOST_INT256_ENABLE_CUDA` (with NVCC) or `BOOST_INT256_ENABLE_SYCL`. It is the single check for whether a GPU device target is in play. Note that on the SYCL device pass the library falls back to its portable path because the spir64 target has no native `pass:[__int128]`, so `BOOST_INT256_HAS_INT128` is not defined there.
+
+- `BOOST_INT256_HAS_SPACESHIP_OPERATOR`: This is defined when the compiler and standard library provide pass:[C++20] three-way comparison (`operator<=>` and `<compare>`). When defined, `uint256` provides `operator<=>`.
+
+- `BOOST_INT256_HAS_FORMAT`: This is defined by `<boost/int256/format.hpp>` when pass:[C++20] `<format>` is available. When defined, that header provides a `std::formatter` specialization.
+
+- `BOOST_INT256_HAS_FMT_FORMAT`: This is defined by `<boost/int256/fmt_format.hpp>` when the pass:[{fmt}] library is available. When defined, that header provides a `fmt::formatter` specialization.
+
+[#host_device]
+- `BOOST_INT256_HOST_DEVICE`: This is defined to `pass:[__host__ __device__]` when compiling for CUDA (`pass:[__CUDACC__]` with `BOOST_INT256_ENABLE_CUDA`), to `SYCL_EXTERNAL` when compiling for SYCL (`BOOST_INT256_ENABLE_SYCL`), and to nothing otherwise.
+The core type operations (constructors, conversion operators, and the comparison, bitwise, arithmetic, and shift operators) and most free functions are annotated with this macro, allowing `uint256` to be used in CUDA and SYCL device code. Host-only integrations that depend on host facilities are not annotated: `std::hash`, the iostream operators, `to_string`, the `std::formatter` / pass:[{fmt}] support, the `std::array` returning byte conversions, and the `core::string_view` overloads of `from_chars`. The `operator long double` conversion is also unavailable when device support is enabled, because neither device target has a distinct `long double`.
