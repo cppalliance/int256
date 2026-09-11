@@ -1,0 +1,189 @@
+# Copyright 2026 Matt Borland
+# Distributed under the Boost Software License, Version 1.0.
+# https://www.boost.org/LICENSE_1_0.txt
+
+require-b2 5.0.1 ;
+import-search /boost/config/checks ;
+import config : requires ;
+import modules ;
+import testing ;
+
+project : requirements
+
+    <warnings>extra
+
+    <toolset>gcc:<cxxflags>-Wsign-conversion
+    <toolset>gcc:<cxxflags>-Wconversion
+    <toolset>gcc:<cxxflags>-Wundef
+    <toolset>gcc:<cxxflags>-Wold-style-cast
+    <toolset>gcc:<cxxflags>-Wfloat-equal
+    <toolset>gcc:<cxxflags>-Wshadow
+    <toolset>gcc:<cxxflags>-Wcast-qual
+    <toolset>gcc:<cxxflags>-Wcast-align
+    <toolset>gcc:<cxxflags>-Wlogical-op
+    <toolset>gcc:<cxxflags>-Wdouble-promotion
+    <toolset>gcc:<cxxflags>-Wformat=2
+    <toolset>gcc:<cxxflags>-Wstack-protector
+
+    <toolset>clang:<cxxflags>-Wsign-conversion
+    <toolset>clang:<cxxflags>-Wconversion
+    <toolset>clang:<cxxflags>-Wundef
+    <toolset>clang:<cxxflags>-Wold-style-cast
+    <toolset>clang:<cxxflags>-Wfloat-equal
+    <toolset>clang:<cxxflags>-Wshadow
+    <toolset>clang:<cxxflags>-Wcast-qual
+    <toolset>clang:<cxxflags>-Wcast-align
+    <toolset>clang:<cxxflags>-Wdouble-promotion
+    <toolset>clang:<cxxflags>-Wformat=2
+    <toolset>clang:<cxxflags>-Wnull-dereference
+    <toolset>clang:<cxxflags>-Wthread-safety
+    <toolset>clang:<cxxflags>-Wunused-lambda-capture
+    <toolset>clang:<cxxflags>-Wassign-enum
+
+    <toolset>msvc:<warnings-as-errors>on
+    <toolset>clang:<warnings-as-errors>on
+    <toolset>gcc:<warnings-as-errors>on
+
+    # The b2 sanitizer features only add -fsanitize flags; define the macros the
+    # tests use to skip checks that intentionally exercise UB (e.g. shift tests).
+    <undefined-sanitizer>on:<define>UBSAN=1
+    <undefined-sanitizer>norecover:<define>UBSAN=1
+    <address-sanitizer>on:<define>ASAN=1
+    <address-sanitizer>norecover:<define>ASAN=1
+
+  [ requires cxx14_decltype_auto cxx14_generic_lambdas cxx14_return_type_deduction cxx14_variable_templates cxx14_constexpr ]
+  ;
+
+run quick.cpp ;
+
+run test_layout.cpp ;
+run test_u256.cpp ;
+run test_u256_vs_multiprecision.cpp ;
+run test_limits_u256.cpp ;
+run test_climits.cpp ;
+
+run test_div.cpp ;
+run test_div_primitives.cpp ;
+run test_short_dividend.cpp ;
+run test_int_div.cpp ;
+run test_msvc_intrinsics.cpp ;
+
+run test_boundaries.cpp ;
+run test_constexpr_boundaries.cpp ;
+run test_consteval_funcs.cpp ;
+
+run test_integer_mixed_ops.cpp ;
+run test_integer_comparison.cpp ;
+run test_mixed_type_sign_compare.cpp ;
+run test_mixed_type_sign_conversion.cpp ;
+run test_cross_type_assign.cpp ;
+run test_builtin_parity.cpp ;
+run test_spaceship_operator.cpp ;
+run test_sign_compare.cpp ;
+
+run test_float_conversion.cpp ;
+run test_float_mixed_ops.cpp ;
+
+run test_bit.cpp ;
+run test_byte_conversions.cpp ;
+
+run test_stream.cpp ;
+run test_to_string.cpp ;
+run test_literals.cpp ;
+run test_from_chars_bases.cpp ;
+run test_charconv.cpp ;
+run test_num_digits.cpp ;
+
+run test_saturating_arith.cpp ;
+run test_ckd.cpp ;
+run test_gcd_lcm.cpp ;
+run test_midpoint.cpp ;
+run test_powm.cpp ;
+run test_ipow.cpp ;
+run test_isqrt.cpp ;
+run test_addmod.cpp ;
+
+run test_format.cpp ;
+run test_fmt_format.cpp ;
+run test_random.cpp ;
+
+# Warnings about padding propagate out of <utility>. Do not fold these onto one
+# line: BoostTestJamfile.cmake only recognizes a line whose whole remainder is a
+# single source, so `run test_hash.cpp : : : <requirement> ;` on one line is
+# silently skipped by the CMake build and the test is never run there.
+run test_hash.cpp
+    : : : <toolset>msvc:<cxxflags>/wd4324 ;
+run test_container_hash.cpp
+    : : : <toolset>msvc:<cxxflags>/wd4324 ;
+
+run limits_link_1.cpp limits_link_2.cpp limits_link_3.cpp ;
+
+run-fail benchmark_u256.cpp ;
+
+# Configuration targets that re-run a test with the builtin 128-bit intermediates
+# switched off. These stay on one line so the CMake Jamfile parser skips them and
+# does not collide with the plain target built from the same source.
+run test_u256_vs_multiprecision.cpp : : : <define>BOOST_INT256_NO_BUILTIN_INT128 : test_u256_vs_multiprecision_no_builtin ;
+run test_u256.cpp : : : <define>BOOST_INT256_NO_BUILTIN_INT128 : test_u256_no_builtin ;
+run test_bit.cpp : : : <define>BOOST_INT256_NO_BUILTIN_INT128 : test_bit_no_builtin ;
+run test_div.cpp : : : <define>BOOST_INT256_NO_BUILTIN_INT128 : test_div_no_builtin ;
+run test_byte_conversions.cpp : : : <define>BOOST_INT256_NO_BUILTIN_INT128 : test_byte_conversions_no_builtin ;
+
+# Compilation of individual headers
+compile compile_tests/int256_master_header_compile.cpp ;
+compile compile_tests/int256_compile.cpp ;
+compile compile_tests/bit_compile.cpp ;
+compile compile_tests/byte_conversions_compile.cpp ;
+compile compile_tests/charconv_compile.cpp ;
+compile compile_tests/climits_compile.cpp ;
+compile compile_tests/cstdlib_compile.cpp ;
+compile compile_tests/fmt_format_compile.cpp ;
+compile compile_tests/format_compile.cpp ;
+compile compile_tests/hash_compile.cpp ;
+compile compile_tests/iostream_compile.cpp ;
+compile compile_tests/limits_compile.cpp ;
+compile compile_tests/literals_compile.cpp ;
+compile compile_tests/numeric_compile.cpp ;
+compile compile_tests/random_compile.cpp ;
+compile compile_tests/string_compile.cpp ;
+compile compile_tests/utilities_compile.cpp ;
+
+compile compile_tests/int256_master_header_compile.cpp : <define>BOOST_INT256_NO_BUILTIN_INT128 : int256_master_header_no_builtin_compile ;
+compile compile_tests/int256_master_header_compile.cpp : <cxxstd>14 : int256_master_header_cxx14_compile ;
+
+compile-fail compile_tests/literals_overflow_fail.cpp ;
+compile-fail compile_tests/literals_base_prefix_fail.cpp ;
+compile-fail compile_tests/literals_invalid_fail.cpp ;
+compile-fail compile_tests/utilities_comparison_fail.cpp ;
+compile-fail compile_tests/byte_conversions_extent_fail.cpp ;
+compile-fail compile_tests/byte_conversions_target_fail.cpp ;
+compile-fail compile_tests/float_modulo_fail.cpp ;
+compile-fail compile_tests/float_bitwise_fail.cpp ;
+compile-fail compile_tests/float_shift_fail.cpp ;
+compile-fail compile_tests/float_compound_modulo_fail.cpp ;
+
+# Examples, each built and run as a test. Sources are owned by A5.
+run ../example/hello_world.cpp ;
+run ../example/construction.cpp ;
+run ../example/basic_arithmetic.cpp ;
+run ../example/stream.cpp ;
+run ../example/rollover.cpp ;
+run ../example/bit.cpp ;
+run ../example/byte_conversions.cpp ;
+run ../example/saturating_arithmetic.cpp ;
+run ../example/numeric_algorithms.cpp ;
+run ../example/integer_division.cpp ;
+run ../example/checked_arithmetic.cpp ;
+run ../example/integer_comparison.cpp ;
+run ../example/mixed_type_arithmetic.cpp ;
+run ../example/mixed_float_arithmetic.cpp ;
+run ../example/math_and_random.cpp ;
+run ../example/charconv.cpp ;
+# Boost.Unordered propagates padding warnings out of <utility> on msvc. The
+# requirement is on its own line so the CMake Jamfile parser still builds this.
+run ../example/container_hash.cpp
+    : : : <toolset>msvc:<cxxflags>/wd4324 ;
+run ../example/to_string.cpp ;
+run ../example/fmt_format.cpp ;
+run ../example/format.cpp ;
+run ../example/cstdlib.cpp ;

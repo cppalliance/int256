@@ -1,0 +1,429 @@
+// Copyright 2026 Matt Borland
+// Distributed under the Boost Software License, Version 1.0.
+// https://www.boost.org/LICENSE_1_0.txt
+//
+// uint256 to and from the built-in floating point types.
+//
+// cpp_int to double is not documented as correctly rounded, so multiprecision is
+// not the oracle here. The reference is built by hand instead: take the top 64
+// bits of the value, fold everything below into a sticky bit, round to nearest
+// with ties to even, and scale with ldexp. That is an independent implementation
+// of the same contract, so agreement means something.
+
+// -Wfloat-equal has to be off before <boost/core/lightweight_test.hpp> is parsed,
+// because BOOST_TEST_EQ on a floating point pair compares with ==. The comparisons
+// in this file are deliberately exact: a correctly rounded conversion has one
+// right answer, so anything other than equality is a failure.
+#if defined(__clang__)
+#  pragma clang diagnostic push
+#  pragma clang diagnostic ignored "-Wfloat-equal"
+#elif defined(__GNUC__)
+#  pragma GCC diagnostic push
+#  pragma GCC diagnostic ignored "-Wfloat-equal"
+#endif
+
+#include <boost/int256.hpp>
+#include <boost/core/lightweight_test.hpp>
+
+#include <cmath>
+#include <cstdint>
+#include <iomanip>
+#include <iostream>
+#include <limits>
+#include <random>
+
+using boost::int256::uint256;
+
+namespace
+{
+
+std::mt19937_64 rng {42};
+
+//=====================================
+// An independent reference for uint256 to floating point
+//=====================================
+
+// Rounds the 256-bit value to the significand width of T, to nearest with ties to
+// even, and scales the result. Built from ldexp and the standard integer to float
+// conversion of a value that fits the significand exactly, so it shares no code
+// with the library.
+template <typename T>
+T reference_to_float(const uint256& v)
+{
+    // Index of the highest non-zero word, or none at all.
+    int top {-1};
+    for (int i {3}; i >= 0; --i)
+    {
+        if (v.words[i] != 0U)
+        {
+            top = i;
+            break;
+        }
+    }
+
+    if (top < 0)
+    {
+        return T{0};
+    }
+
+    // Bit position of the most significant set bit.
+    int high_bit {top * 64};
+    for (int b {63}; b >= 0; --b)
+    {
+        if ((v.words[top] >> b) & 1U)
+        {
+            high_bit += b;
+            break;
+        }
+    }
+
+    constexpr int digits {std::numeric_limits<T>::digits};
+
+    if (high_bit < digits)
+    {
+        // The whole value fits the significand, so one conversion is exact.
+        return static_cast<T>(v.words[0]);
+    }
+
+    // Keep the top `digits` bits, and remember whether anything was dropped.
+    const int drop {high_bit - digits + 1};
+
+    std::uint64_t kept {0};
+    for (int b {0}; b < digits; ++b)
+    {
+        const int source {drop + b};
+        const auto word {static_cast<unsigned>(source / 64)};
+        const auto bit {static_cast<unsigned>(source % 64)};
+        if (word < 4U && ((v.words[word] >> bit) & 1U))
+        {
+            kept |= (UINT64_C(1) << b);
+        }
+    }
+
+    // The bit just below what was kept decides the direction; everything under it
+    // is the sticky bit.
+    const auto guard_index {static_cast<unsigned>(drop - 1)};
+    const bool guard {((v.words[guard_index / 64U] >> (guard_index % 64U)) & 1U) != 0U};
+
+    bool sticky {false};
+    for (int b {0}; b < drop - 1; ++b)
+    {
+        const auto word {static_cast<unsigned>(b / 64)};
+        const auto bit {static_cast<unsigned>(b % 64)};
+        if ((v.words[word] >> bit) & 1U)
+        {
+            sticky = true;
+            break;
+        }
+    }
+
+    if (guard && (sticky || ((kept & 1U) != 0U)))
+    {
+        ++kept;
+    }
+
+    return std::ldexp(static_cast<T>(kept), drop);
+}
+
+template <typename T>
+void check_to_float(const uint256& v, const char* what)
+{
+    const auto got {static_cast<T>(v)};
+    const auto expected {reference_to_float<T>(v)};
+
+    if (got != expected)
+    {
+        std::cerr << "float conversion mismatch in " << what << '\n'
+                  << "  operand  = " << v << '\n'
+                  << "  got      = " << std::setprecision(40) << got << '\n'
+                  << "  expected = " << std::setprecision(40) << expected << std::endl;
+    }
+
+    BOOST_TEST(got == expected);
+
+    // The detail routine and the conversion operator must agree.
+    BOOST_TEST(boost::int256::detail::unsigned_words_to_float<T>(v.words) == expected);
+}
+
+//=====================================
+// Exact at every power of two
+//=====================================
+
+// 2^k has a one bit significand, so every type represents it exactly and the
+// conversion has to be exact for all 256 of them.
+template <typename T>
+void test_powers_of_two()
+{
+    const uint256 one {UINT64_C(0), UINT64_C(0), UINT64_C(0), UINT64_C(1)};
+
+    for (int k {0}; k < 256; ++k)
+    {
+        const uint256 value {one << static_cast<unsigned>(k)};
+        const auto got {static_cast<T>(value)};
+        const auto expected {std::ldexp(T{1}, k)};
+
+        if (got != expected)
+        {
+            std::cerr << "2^" << k << " did not convert exactly" << std::endl;
+        }
+
+        BOOST_TEST(got == expected);
+
+        // And back again, whenever the power of two is still finite in T. A float
+        // tops out just under 2^128, so 2^128 and above convert to infinity and
+        // come back as the saturated maximum rather than the original value.
+        if (k < std::numeric_limits<T>::max_exponent)
+        {
+            const uint256 round_tripped {got};
+            BOOST_TEST_EQ(round_tripped, value);
+        }
+        else
+        {
+            BOOST_TEST(std::isinf(got));
+            BOOST_TEST_EQ(uint256{got}, (uint256{UINT64_MAX, UINT64_MAX, UINT64_MAX, UINT64_MAX}));
+        }
+    }
+
+    // 2^k - 1 and 2^k + 1 are the neighbours that force a rounding decision.
+    for (int k {1}; k < 256; ++k)
+    {
+        const uint256 power {one << static_cast<unsigned>(k)};
+        check_to_float<T>(power - 1U, "2^k - 1");
+        if (k < 255)
+        {
+            check_to_float<T>(power + 1U, "2^k + 1");
+        }
+    }
+}
+
+//=====================================
+// The documented saturation and boundary answers
+//=====================================
+
+void test_directed_answers()
+{
+    const uint256 max {UINT64_MAX, UINT64_MAX, UINT64_MAX, UINT64_MAX};
+    const uint256 one {UINT64_C(0), UINT64_C(0), UINT64_C(0), UINT64_C(1)};
+
+    // The maximum rounds up to 2^256 in double, which is representable, and to
+    // infinity in float, which tops out just under 2^128.
+    BOOST_TEST(static_cast<double>(max) == std::ldexp(1.0, 256));
+    BOOST_TEST(std::isinf(static_cast<float>(max)));
+
+    // The rounding edge at the top of the double range. Doubles just below 2^256
+    // step by 2^203, so the halfway point is 2^256 - 2^202. Ties go to even and
+    // 2^256 has an even significand, so the halfway point rounds up and one less
+    // rounds down. All three answers were confirmed against the implementation
+    // before being written here.
+    BOOST_TEST(static_cast<double>(max - (one << 203U) + 1U) < std::ldexp(1.0, 256));
+    BOOST_TEST(static_cast<double>(max - (one << 202U) + 1U) == std::ldexp(1.0, 256));
+    BOOST_TEST(static_cast<double>(max - (one << 202U)) < std::ldexp(1.0, 256));
+
+    // The same edge for float, which sits at the top of its own range rather than
+    // near 2^256. The largest finite float is 2^128 - 2^104 and the step below it
+    // is 2^104, so the halfway point to 2^128 is 2^128 - 2^103.
+    BOOST_TEST(static_cast<float>((one << 128U) - (one << 104U)) == (std::numeric_limits<float>::max)());
+    BOOST_TEST(std::isinf(static_cast<float>((one << 128U) - (one << 103U))));
+    BOOST_TEST(static_cast<float>((one << 128U) - (one << 103U) - 1U) == (std::numeric_limits<float>::max)());
+
+    // 2^255 is a long way below 2^256 and stays finite in a double.
+    BOOST_TEST(static_cast<double>(one << 255U) == std::ldexp(1.0, 255));
+
+    // Zero and one are exact everywhere.
+    BOOST_TEST(static_cast<double>(uint256{}) == 0.0);
+    BOOST_TEST(static_cast<float>(uint256{}) == 0.0F);
+    BOOST_TEST(static_cast<double>(one) == 1.0);
+
+    // A value that fits the significand exactly.
+    BOOST_TEST(static_cast<double>(uint256{UINT64_C(9007199254740992)}) == 9007199254740992.0);
+    BOOST_TEST(static_cast<double>(uint256{UINT64_C(123456789)}) == 123456789.0);
+}
+
+//=====================================
+// Floating point to uint256
+//=====================================
+
+void test_from_float()
+{
+    // NaN and every negative value give zero.
+    BOOST_TEST_EQ(uint256{std::numeric_limits<double>::quiet_NaN()}, uint256{});
+    BOOST_TEST_EQ(uint256{-std::numeric_limits<double>::quiet_NaN()}, uint256{});
+    BOOST_TEST_EQ(uint256{-1.0}, uint256{});
+    BOOST_TEST_EQ(uint256{-0.5}, uint256{});
+    BOOST_TEST_EQ(uint256{-1e300}, uint256{});
+    BOOST_TEST_EQ(uint256{-std::numeric_limits<double>::infinity()}, uint256{});
+    BOOST_TEST_EQ(uint256{std::numeric_limits<float>::quiet_NaN()}, uint256{});
+    BOOST_TEST_EQ(uint256{-1.0F}, uint256{});
+
+    // Anything at or above 2^256 saturates at the maximum.
+    const uint256 max {UINT64_MAX, UINT64_MAX, UINT64_MAX, UINT64_MAX};
+    BOOST_TEST_EQ(uint256{std::numeric_limits<double>::infinity()}, max);
+    BOOST_TEST_EQ(uint256{std::ldexp(1.0, 256)}, max);
+    BOOST_TEST_EQ(uint256{std::ldexp(1.0, 300)}, max);
+    BOOST_TEST_EQ(uint256{1e300}, max);
+    BOOST_TEST_EQ(uint256{std::numeric_limits<float>::infinity()}, max);
+
+    // Just below 2^256 does not saturate.
+    BOOST_TEST(uint256{std::ldexp(1.0, 255)} != max);
+    BOOST_TEST_EQ(uint256{std::ldexp(1.0, 255)},
+                  (uint256{UINT64_C(0x8000000000000000), UINT64_C(0), UINT64_C(0), UINT64_C(0)}));
+
+    // The fractional part is truncated toward zero.
+    BOOST_TEST_EQ(uint256{0.0}, uint256{});
+    BOOST_TEST_EQ(uint256{0.5}, uint256{});
+    BOOST_TEST_EQ(uint256{0.9999}, uint256{});
+    BOOST_TEST_EQ(uint256{1.5}, uint256{1U});
+    BOOST_TEST_EQ(uint256{42.75}, uint256{42U});
+    BOOST_TEST_EQ(uint256{-0.0}, uint256{});
+
+    // Every power of two round trips exactly.
+    const uint256 one {UINT64_C(0), UINT64_C(0), UINT64_C(0), UINT64_C(1)};
+    for (int k {0}; k < 256; ++k)
+    {
+        const auto as_double {std::ldexp(1.0, k)};
+        BOOST_TEST_EQ(uint256{as_double}, (one << static_cast<unsigned>(k)));
+    }
+
+    // 2^200, called out in the plan, and 1e77, which is just under the maximum.
+    BOOST_TEST_EQ(uint256{std::ldexp(1.0, 200)}, (one << 200U));
+
+    const auto ten_to_77 {std::pow(10.0, 77.0)};
+    const uint256 from_1e77 {ten_to_77};
+    BOOST_TEST(from_1e77 != 0U);
+    BOOST_TEST(from_1e77 < max);
+    // 1e77 as a double is exact to 53 bits, so converting back must give the same
+    // double.
+    BOOST_TEST(static_cast<double>(from_1e77) == ten_to_77);
+
+    // Integral doubles of every magnitude round trip.
+    for (int k {0}; k < 250; ++k)
+    {
+        const auto value {std::ldexp(1.0, k) + std::ldexp(1.0, k > 52 ? k - 52 : 0)};
+        const uint256 converted {value};
+        BOOST_TEST(static_cast<double>(converted) == value);
+    }
+
+    // Long double on the host, which has a wider significand on x86.
+    #ifndef BOOST_INT256_HAS_GPU_SUPPORT
+    BOOST_TEST_EQ(uint256{static_cast<long double>(1.0L)}, uint256{1U});
+    BOOST_TEST_EQ(uint256{-1.0L}, uint256{});
+    BOOST_TEST_EQ(uint256{std::numeric_limits<long double>::infinity()}, max);
+    for (int k {0}; k < 256; ++k)
+    {
+        const auto as_long_double {std::ldexp(1.0L, k)};
+        BOOST_TEST_EQ(uint256{as_long_double}, (one << static_cast<unsigned>(k)));
+    }
+    #endif
+}
+
+// float_to_uint64 splits at 2^63 to dodge a clang 7 x87 miscompile, so both sides
+// of that split are exercised directly.
+void test_float_to_uint64()
+{
+    const std::uint64_t values[] {
+        UINT64_C(0), UINT64_C(1), UINT64_C(42),
+        (UINT64_C(1) << 52) - 1U, UINT64_C(1) << 52,
+        (UINT64_C(1) << 62), (UINT64_C(1) << 63) - 1024U,
+        UINT64_C(1) << 63, (UINT64_C(1) << 63) + 2048U,
+        UINT64_MAX - 2047U
+    };
+
+    for (const auto v : values)
+    {
+        // Only values exactly representable as a double are meaningful here.
+        const auto as_double {static_cast<double>(v)};
+        if (static_cast<std::uint64_t>(as_double) != v && as_double < std::ldexp(1.0, 64))
+        {
+            continue;
+        }
+
+        BOOST_TEST_EQ(boost::int256::detail::float_to_uint64(as_double),
+                      static_cast<std::uint64_t>(as_double));
+    }
+
+    // exact_power_of_two must be exact across the whole 0 to 255 range, which is
+    // what keeps the scaling from rounding twice.
+    for (int k {0}; k < 256; ++k)
+    {
+        BOOST_TEST(boost::int256::detail::exact_power_of_two<double>(k) == std::ldexp(1.0, k));
+    }
+    for (int k {0}; k < 128; ++k)
+    {
+        BOOST_TEST(boost::int256::detail::exact_power_of_two<float>(k) == std::ldexp(1.0F, k));
+    }
+}
+
+//=====================================
+// Random values against the reference
+//=====================================
+
+template <typename T>
+void test_random()
+{
+    for (int i {0}; i < 4096; ++i)
+    {
+        // Every width, so both the two word and the wide routines are reached.
+        const int words {(i % 4) + 1};
+
+        uint256 v {};
+        for (int w {0}; w < words; ++w)
+        {
+            v.words[w] = rng();
+        }
+
+        check_to_float<T>(v, "random");
+
+        if (boost::detail::test_errors() != 0)
+        {
+            return;
+        }
+    }
+
+    // Values with a long run of zeros below the top bits, which is where a missing
+    // sticky bit shows up.
+    for (int i {0}; i < 1024; ++i)
+    {
+        uint256 v {};
+        v.words[3] = rng() | (UINT64_C(1) << 63);
+        v.words[0] = UINT64_C(1);
+
+        check_to_float<T>(v, "sticky bit only in the low word");
+
+        if (boost::detail::test_errors() != 0)
+        {
+            return;
+        }
+    }
+}
+
+// A round trip through a floating point type is lossless whenever the value fits
+// the significand.
+void test_round_trip_within_significand()
+{
+    for (int i {0}; i < 1024; ++i)
+    {
+        const auto small {rng() >> 11};  // 53 bits, exact in a double
+        const uint256 v {small};
+        BOOST_TEST_EQ(uint256{static_cast<double>(v)}, v);
+
+        const auto tiny {static_cast<std::uint64_t>(rng() >> 41)};  // 23 bits, exact in a float
+        const uint256 w {tiny};
+        BOOST_TEST_EQ(uint256{static_cast<float>(w)}, w);
+    }
+}
+
+} // namespace
+
+int main()
+{
+    test_directed_answers();
+    test_powers_of_two<double>();
+    test_powers_of_two<float>();
+    test_from_float();
+    test_float_to_uint64();
+    test_random<double>();
+    test_random<float>();
+    test_round_trip_within_significand();
+
+    return boost::report_errors();
+}
