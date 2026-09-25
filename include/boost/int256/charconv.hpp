@@ -35,12 +35,20 @@ namespace detail {
 template <>
 struct is_signed<int256::uint256> { static constexpr bool value = false; };
 
-// The signed type does not exist yet, so both maps land on the unsigned one
+template <>
+struct is_signed<int256::int256> { static constexpr bool value = true; };
+
 template <>
 struct make_unsigned<int256::uint256> { using type = int256::uint256; };
 
 template <>
-struct make_signed<int256::uint256> { using type = int256::uint256; };
+struct make_unsigned<int256::int256> { using type = int256::uint256; };
+
+template <>
+struct make_signed<int256::uint256> { using type = int256::int256; };
+
+template <>
+struct make_signed<int256::int256> { using type = int256::int256; };
 
 #if defined(BOOST_INT256_HAS_GPU_SUPPORT)
 
@@ -48,6 +56,12 @@ template <>
 BOOST_INT256_HOST_DEVICE constexpr int256::uint256 get_max_value<int256::uint256>()
 {
     return (std::numeric_limits<int256::uint256>::max)();
+}
+
+template <>
+BOOST_INT256_HOST_DEVICE constexpr int256::int256 get_max_value<int256::int256>()
+{
+    return (std::numeric_limits<int256::int256>::max)();
 }
 
 #endif
@@ -295,6 +309,28 @@ BOOST_INT256_HOST_DEVICE BOOST_CHARCONV_GCC5_CONSTEXPR from_chars_result from_ch
 BOOST_CHARCONV_GCC5_CONSTEXPR from_chars_result from_chars(core::string_view sv, int256::uint256& value, const int base = 10) noexcept
 {
     return detail::from_chars_integer_impl<int256::uint256, int256::uint256>(sv.data(), sv.data() + sv.size(), value, base);
+}
+
+// The signed twins. Same note as above about to_chars_integer_impl's buffer size: this
+// must never be routed through a 128-bit-specialized decimal fast path
+BOOST_INT256_HOST_DEVICE BOOST_CHARCONV_CONSTEXPR to_chars_result to_chars(char* first, char* last, const int256::int256& value, const int base = 10) noexcept
+{
+    if (first >= last)
+    {
+        return {last, std::errc::value_too_large};
+    }
+
+    return detail::to_chars_integer_impl<int256::int256, int256::uint256>(first, last, value, base);
+}
+
+BOOST_INT256_HOST_DEVICE BOOST_CHARCONV_GCC5_CONSTEXPR from_chars_result from_chars(const char* first, const char* last, int256::int256& value, const int base = 10) noexcept
+{
+    return detail::from_chars_integer_impl<int256::int256, int256::uint256>(first, last, value, base);
+}
+
+BOOST_CHARCONV_GCC5_CONSTEXPR from_chars_result from_chars(core::string_view sv, int256::int256& value, const int base = 10) noexcept
+{
+    return detail::from_chars_integer_impl<int256::int256, int256::uint256>(sv.data(), sv.data() + sv.size(), value, base);
 }
 
 } // namespace charconv
