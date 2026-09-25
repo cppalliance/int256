@@ -31,6 +31,46 @@ BOOST_INT256_EXPORT BOOST_INT256_HOST_DEVICE constexpr u256div_t div(const uint2
     return res;
 }
 
+BOOST_INT256_EXPORT struct i256div_t
+{
+    int256 quot;
+    int256 rem;
+};
+
+// Quotient and remainder of a single division, in the style of std::div
+BOOST_INT256_EXPORT BOOST_INT256_HOST_DEVICE constexpr i256div_t div(const int256& x, const int256& y) noexcept
+{
+    if (y == 0)
+    {
+        BOOST_INT256_UNREACHABLE;
+    }
+
+    const auto abs_x {detail::to_unsigned_bits(abs(x))};
+    const auto abs_y {detail::to_unsigned_bits(abs(y))};
+    const auto negative_quot {(x.signed_high() < 0) != (y.signed_high() < 0)};
+    const auto negative_rem {x.signed_high() < 0};
+
+    i256div_t res {};
+
+    if (abs_x < abs_y)
+    {
+        res.rem = x;
+        return res;
+    }
+
+    uint256 quotient {};
+    uint256 remainder {};
+    detail::divide<true>(abs_x, abs_y, quotient, remainder);
+
+    const auto signed_quotient {detail::to_signed_bits(quotient)};
+    const auto signed_remainder {detail::to_signed_bits(remainder)};
+
+    res.quot = negative_quot ? -signed_quotient : signed_quotient;
+    res.rem = negative_rem ? -signed_remainder : signed_remainder;
+
+    return res;
+}
+
 } // namespace int256
 } // namespace boost
 
