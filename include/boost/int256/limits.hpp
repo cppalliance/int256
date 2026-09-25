@@ -5,6 +5,6 @@
 #ifndef BOOST_INT256_LIMITS_HPP
 #define BOOST_INT256_LIMITS_HPP
 
-#include <boost/int256/detail/uint256_imp.hpp>
+#include <boost/int256/int256.hpp>
 
 #endif // BOOST_INT256_LIMITS_HPP
