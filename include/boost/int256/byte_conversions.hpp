@@ -23,15 +23,10 @@ namespace int256 {
 
 namespace detail {
 
-// The library types that the byte conversion functions accept as a target
-template <typename T>
-struct valid_overload
-{
-    static constexpr bool value = std::is_same<T, uint256>::value;
-};
-
-template <typename T>
-BOOST_INT256_INLINE_CONSTEXPR bool is_valid_overload_v = valid_overload<T>::value;
+// detail::valid_overload / is_valid_overload_v (the library types that the byte
+// conversion functions accept as a target) now live in detail/conversions.hpp, the
+// single definition shared with every other header that needs to accept both uint256
+// and int256
 
 // Reverses the word order, leaving the bytes inside each word alone
 BOOST_INT256_HOST_DEVICE constexpr uint256 reverse_words(const uint256& value) noexcept
@@ -90,6 +85,30 @@ BOOST_INT256_EXPORT BOOST_INT256_HOST_DEVICE constexpr uint256 to_le(const uint2
 }
 
 BOOST_INT256_EXPORT BOOST_INT256_HOST_DEVICE constexpr uint256 from_le(const uint256& value) noexcept
+{
+    // Self-inverse
+    return to_le(value);
+}
+
+// The signed twins: byte order has no notion of sign, so each of these is the
+// corresponding uint256 overload run on the bit image and converted back
+BOOST_INT256_EXPORT BOOST_INT256_HOST_DEVICE constexpr int256 to_be(const int256& value) noexcept
+{
+    return detail::to_signed_bits(to_be(detail::to_unsigned_bits(value)));
+}
+
+BOOST_INT256_EXPORT BOOST_INT256_HOST_DEVICE constexpr int256 from_be(const int256& value) noexcept
+{
+    // Self-inverse
+    return to_be(value);
+}
+
+BOOST_INT256_EXPORT BOOST_INT256_HOST_DEVICE constexpr int256 to_le(const int256& value) noexcept
+{
+    return detail::to_signed_bits(to_le(detail::to_unsigned_bits(value)));
+}
+
+BOOST_INT256_EXPORT BOOST_INT256_HOST_DEVICE constexpr int256 from_le(const int256& value) noexcept
 {
     // Self-inverse
     return to_le(value);
@@ -276,18 +295,26 @@ constexpr std::array<ByteType, sizeof(uint256)> to_ne_bytes_impl(const uint256& 
     #endif
 }
 
+// T is either uint256 or int256 (is_valid_overload_v gates the public entry points on
+// this). The words are always assembled into a uint256 first: its 4-word constructor
+// takes every word as std::uint64_t, so nothing narrows. static_cast to T is then a no-op
+// for T = uint256, or the bit-copying int256(const uint256&) constructor for T = int256.
+// A generic T{word, word, word, word} here would narrow std::uint64_t into the signed
+// top word of int256's own 4-word constructor
 template <typename T, typename Bytes>
 BOOST_INT256_HOST_DEVICE constexpr T from_be_bytes_impl(const Bytes& bytes) noexcept
 {
-    return T{word_from_be(bytes, 0U), word_from_be(bytes, 8U),
-             word_from_be(bytes, 16U), word_from_be(bytes, 24U)};
+    const uint256 assembled {word_from_be(bytes, 0U), word_from_be(bytes, 8U),
+                             word_from_be(bytes, 16U), word_from_be(bytes, 24U)};
+    return static_cast<T>(assembled);
 }
 
 template <typename T, typename Bytes>
 BOOST_INT256_HOST_DEVICE constexpr T from_le_bytes_impl(const Bytes& bytes) noexcept
 {
-    return T{word_from_le(bytes, 24U), word_from_le(bytes, 16U),
-             word_from_le(bytes, 8U), word_from_le(bytes, 0U)};
+    const uint256 assembled {word_from_le(bytes, 24U), word_from_le(bytes, 16U),
+                             word_from_le(bytes, 8U), word_from_le(bytes, 0U)};
+    return static_cast<T>(assembled);
 }
 
 template <typename T, typename Bytes>
@@ -299,8 +326,9 @@ BOOST_INT256_HOST_DEVICE constexpr T from_ne_bytes_impl(const Bytes& bytes) noex
 
     #else
 
-    return T{word_from_be(bytes, 24U), word_from_be(bytes, 16U),
-             word_from_be(bytes, 8U), word_from_be(bytes, 0U)};
+    const uint256 assembled {word_from_be(bytes, 24U), word_from_be(bytes, 16U),
+                             word_from_be(bytes, 8U), word_from_be(bytes, 0U)};
+    return static_cast<T>(assembled);
 
     #endif
 }
@@ -331,6 +359,26 @@ constexpr std::array<ByteType, sizeof(uint256)> to_ne_bytes(const uint256& value
     return detail::to_ne_bytes_impl<ByteType>(value);
 }
 
+// Signed twins: byte order and byte extraction have no notion of sign, so each of these
+// runs the corresponding uint256 overload on the bit image
+BOOST_INT256_EXPORT template <typename ByteType = std::uint8_t, std::enable_if_t<detail::is_byte_like_v<ByteType>, bool> = true>
+constexpr std::array<ByteType, sizeof(int256)> to_be_bytes(const int256& value) noexcept
+{
+    return detail::to_be_bytes_impl<ByteType>(detail::to_unsigned_bits(value));
+}
+
+BOOST_INT256_EXPORT template <typename ByteType = std::uint8_t, std::enable_if_t<detail::is_byte_like_v<ByteType>, bool> = true>
+constexpr std::array<ByteType, sizeof(int256)> to_le_bytes(const int256& value) noexcept
+{
+    return detail::to_le_bytes_impl<ByteType>(detail::to_unsigned_bits(value));
+}
+
+BOOST_INT256_EXPORT template <typename ByteType = std::uint8_t, std::enable_if_t<detail::is_byte_like_v<ByteType>, bool> = true>
+constexpr std::array<ByteType, sizeof(int256)> to_ne_bytes(const int256& value) noexcept
+{
+    return detail::to_ne_bytes_impl<ByteType>(detail::to_unsigned_bits(value));
+}
+
 // Raw array forms, usable from a device pass
 BOOST_INT256_EXPORT template <typename ByteType, std::enable_if_t<detail::is_byte_like_v<ByteType>, bool> = true>
 BOOST_INT256_HOST_DEVICE constexpr void to_be_bytes(const uint256& value, ByteType (&out)[sizeof(uint256)]) noexcept
@@ -350,11 +398,29 @@ BOOST_INT256_HOST_DEVICE constexpr void to_ne_bytes(const uint256& value, ByteTy
     detail::write_ne_bytes<ByteType>(value, out);
 }
 
+BOOST_INT256_EXPORT template <typename ByteType, std::enable_if_t<detail::is_byte_like_v<ByteType>, bool> = true>
+BOOST_INT256_HOST_DEVICE constexpr void to_be_bytes(const int256& value, ByteType (&out)[sizeof(int256)]) noexcept
+{
+    detail::write_be_bytes<ByteType>(detail::to_unsigned_bits(value), out);
+}
+
+BOOST_INT256_EXPORT template <typename ByteType, std::enable_if_t<detail::is_byte_like_v<ByteType>, bool> = true>
+BOOST_INT256_HOST_DEVICE constexpr void to_le_bytes(const int256& value, ByteType (&out)[sizeof(int256)]) noexcept
+{
+    detail::write_le_bytes<ByteType>(detail::to_unsigned_bits(value), out);
+}
+
+BOOST_INT256_EXPORT template <typename ByteType, std::enable_if_t<detail::is_byte_like_v<ByteType>, bool> = true>
+BOOST_INT256_HOST_DEVICE constexpr void to_ne_bytes(const int256& value, ByteType (&out)[sizeof(int256)]) noexcept
+{
+    detail::write_ne_bytes<ByteType>(detail::to_unsigned_bits(value), out);
+}
+
 BOOST_INT256_EXPORT template <typename T, typename ByteType, std::size_t N>
 constexpr T from_be_bytes(const std::array<ByteType, N>& bytes) noexcept
 {
     static_assert(detail::is_valid_overload_v<T>,
-                  "The target type must be boost::int256::uint256");
+                  "The target type must be boost::int256::uint256 or boost::int256::int256");
     static_assert(detail::is_byte_like_v<ByteType>,
                   "The source bytes must be char, signed char, unsigned char, or std::byte");
     static_assert(N == sizeof(T), "The number of bytes provided, and the target type number of bytes do not match");
@@ -367,7 +433,7 @@ BOOST_INT256_EXPORT template <typename T, typename ByteType>
 BOOST_INT256_HOST_DEVICE constexpr T from_be_bytes(const ByteType* bytes) noexcept
 {
     static_assert(detail::is_valid_overload_v<T>,
-                  "The target type must be boost::int256::uint256");
+                  "The target type must be boost::int256::uint256 or boost::int256::int256");
     static_assert(detail::is_byte_like_v<ByteType>,
                   "The source bytes must be char, signed char, unsigned char, or std::byte");
 
@@ -378,7 +444,7 @@ BOOST_INT256_EXPORT template <typename T, typename ByteType, std::size_t N>
 constexpr T from_le_bytes(const std::array<ByteType, N>& bytes) noexcept
 {
     static_assert(detail::is_valid_overload_v<T>,
-                  "The target type must be boost::int256::uint256");
+                  "The target type must be boost::int256::uint256 or boost::int256::int256");
     static_assert(detail::is_byte_like_v<ByteType>,
                   "The source bytes must be char, signed char, unsigned char, or std::byte");
     static_assert(N == sizeof(T), "The number of bytes provided, and the target type number of bytes do not match");
@@ -391,7 +457,7 @@ BOOST_INT256_EXPORT template <typename T, typename ByteType>
 BOOST_INT256_HOST_DEVICE constexpr T from_le_bytes(const ByteType* bytes) noexcept
 {
     static_assert(detail::is_valid_overload_v<T>,
-                  "The target type must be boost::int256::uint256");
+                  "The target type must be boost::int256::uint256 or boost::int256::int256");
     static_assert(detail::is_byte_like_v<ByteType>,
                   "The source bytes must be char, signed char, unsigned char, or std::byte");
 
@@ -402,7 +468,7 @@ BOOST_INT256_EXPORT template <typename T, typename ByteType, std::size_t N>
 constexpr T from_ne_bytes(const std::array<ByteType, N>& bytes) noexcept
 {
     static_assert(detail::is_valid_overload_v<T>,
-                  "The target type must be boost::int256::uint256");
+                  "The target type must be boost::int256::uint256 or boost::int256::int256");
     static_assert(detail::is_byte_like_v<ByteType>,
                   "The source bytes must be char, signed char, unsigned char, or std::byte");
     static_assert(N == sizeof(T), "The number of bytes provided, and the target type number of bytes do not match");
@@ -415,7 +481,7 @@ BOOST_INT256_EXPORT template <typename T, typename ByteType>
 BOOST_INT256_HOST_DEVICE constexpr T from_ne_bytes(const ByteType* bytes) noexcept
 {
     static_assert(detail::is_valid_overload_v<T>,
-                  "The target type must be boost::int256::uint256");
+                  "The target type must be boost::int256::uint256 or boost::int256::int256");
     static_assert(detail::is_byte_like_v<ByteType>,
                   "The source bytes must be char, signed char, unsigned char, or std::byte");
 
