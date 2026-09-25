@@ -201,7 +201,7 @@ constexpr auto parse_impl(ParseContext& ctx)
 template <typename T>
 struct is_library_type_impl
 {
-    static constexpr bool value {std::is_same_v<T, boost::int256::uint256>};
+    static constexpr bool value {std::is_same_v<T, boost::int256::uint256> || std::is_same_v<T, boost::int256::int256>};
 };
 
 template <typename T>
@@ -257,13 +257,29 @@ struct formatter<T>
     {
         char buffer[boost::int256::detail::mini_to_chars_buffer_size] {};
 
-        const auto end {boost::int256::detail::mini_to_chars(buffer, v, base, is_upper)};
+        // The sign is managed by this function, not by mini_to_chars, so the magnitude
+        // is what gets formatted: abs() is exact for min() (its magnitude is 2^255,
+        // which to_unsigned_bits reports correctly), so there is no special case needed
+        bool isneg {false};
+        boost::int256::uint256 abs_v {};
+
+        if constexpr (std::is_same_v<T, boost::int256::int256>)
+        {
+            isneg = v.signed_high() < 0;
+            abs_v = boost::int256::detail::to_unsigned_bits(boost::int256::abs(v));
+        }
+        else
+        {
+            abs_v = v;
+        }
+
+        const auto end {boost::int256::detail::mini_to_chars(buffer, abs_v, base, is_upper)};
         std::string s {end, buffer + sizeof(buffer)};
 
         // std::format prints {:#o} of zero as "0", not "00": the octal prefix is the
         // leading digit itself, so it is only added for a nonzero value. The 0x and 0b
         // prefixes are printed for zero.
-        const bool add_prefix {prefix && !(base == 8 && v == 0U)};
+        const bool add_prefix {prefix && !(base == 8 && abs_v == 0U)};
 
         // Calculate prefix length that will be added later
         std::size_t prefix_len {0};
@@ -283,10 +299,10 @@ struct formatter<T>
             }
         }
 
-        // Calculate sign length that will be added later. The type is unsigned, so only
-        // an explicit + or space ever produces one.
+        // Calculate sign length that will be added later. For uint256 only an explicit
+        // + or space ever produces one; for a negative int256 there is always one.
         std::size_t sign_len {0};
-        if (sign == boost::int256::detail::sign_option::plus || sign == boost::int256::detail::sign_option::space)
+        if (sign == boost::int256::detail::sign_option::plus || sign == boost::int256::detail::sign_option::space || isneg)
         {
             sign_len = 1;
         }
@@ -346,17 +362,36 @@ struct formatter<T>
             }
         }
 
-        // Insert our sign
+        // Insert our sign. A negative int256 always carries one regardless of the sign
+        // option, and it is never doubled up with the + or space that option would
+        // otherwise add for a non-negative value
         switch (sign)
         {
             case boost::int256::detail::sign_option::plus:
-                s.insert(s.begin(), '+');
+                if (isneg)
+                {
+                    s.insert(s.begin(), '-');
+                }
+                else
+                {
+                    s.insert(s.begin(), '+');
+                }
                 break;
             case boost::int256::detail::sign_option::space:
-                s.insert(s.begin(), ' ');
+                if (isneg)
+                {
+                    s.insert(s.begin(), '-');
+                }
+                else
+                {
+                    s.insert(s.begin(), ' ');
+                }
                 break;
             case boost::int256::detail::sign_option::negative:
-                // An unsigned value never carries a sign
+                if (isneg)
+                {
+                    s.insert(s.begin(), '-');
+                }
                 break;
             default:                        // LCOV_EXCL_LINE
                 BOOST_INT256_UNREACHABLE;   // LCOV_EXCL_LINE

@@ -209,7 +209,7 @@ constexpr auto parse_impl(ParseContext& ctx)
 template <typename T>
 struct is_library_type_impl
 {
-    static constexpr bool value {std::is_same<T, boost::int256::uint256>::value};
+    static constexpr bool value {std::is_same<T, boost::int256::uint256>::value || std::is_same<T, boost::int256::int256>::value};
 };
 
 template <typename T>
@@ -258,8 +258,19 @@ struct formatter
     {
         char buffer[detail::mini_to_chars_buffer_size] {};
 
-        const auto end {detail::mini_to_chars(buffer, v, base, is_upper)};
-        std::string s {end, buffer + sizeof(buffer)};
+        // mini_to_chars dispatches on T at compile time and already writes a leading
+        // '-' for a negative int256 (never for uint256), so the sign is peeled off the
+        // front here rather than reconstructed. This keeps this shared formatter free
+        // of any int256-only member call, which would not compile when T is uint256
+        auto digits_first {detail::mini_to_chars(buffer, v, base, is_upper)};
+        const bool isneg {*digits_first == '-'};
+
+        if (isneg)
+        {
+            ++digits_first;
+        }
+
+        std::string s {digits_first, buffer + sizeof(buffer)};
 
         // std::format prints {:#o} of zero as "0", not "00": the octal prefix is the
         // leading digit itself, so it is only added for a nonzero value. The 0x and 0b
@@ -284,10 +295,10 @@ struct formatter
             }
         }
 
-        // Calculate sign length that will be added later. The type is unsigned, so only
-        // an explicit + or space ever produces one.
+        // Calculate sign length that will be added later. For uint256 only an explicit
+        // + or space ever produces one; for a negative int256 there is always one.
         std::size_t sign_len {0};
-        if (sign == sign_option::plus || sign == sign_option::space)
+        if (sign == sign_option::plus || sign == sign_option::space || isneg)
         {
             sign_len = 1;
         }
@@ -347,17 +358,36 @@ struct formatter
             }
         }
 
-        // Insert our sign
+        // Insert our sign. A negative int256 always carries one regardless of the sign
+        // option, and it is never doubled up with the + or space that option would
+        // otherwise add for a non-negative value
         switch (sign)
         {
             case sign_option::plus:
-                s.insert(s.begin(), '+');
+                if (isneg)
+                {
+                    s.insert(s.begin(), '-');
+                }
+                else
+                {
+                    s.insert(s.begin(), '+');
+                }
                 break;
             case sign_option::space:
-                s.insert(s.begin(), ' ');
+                if (isneg)
+                {
+                    s.insert(s.begin(), '-');
+                }
+                else
+                {
+                    s.insert(s.begin(), ' ');
+                }
                 break;
             case sign_option::negative:
-                // An unsigned value never carries a sign
+                if (isneg)
+                {
+                    s.insert(s.begin(), '-');
+                }
                 break;
                 // LCOV_EXCL_START
             default:
@@ -412,6 +442,9 @@ namespace fmt {
 
 template <>
 struct formatter<boost::int256::uint256> : public boost::int256::fmt_detail::formatter<boost::int256::uint256> {};
+
+template <>
+struct formatter<boost::int256::int256> : public boost::int256::fmt_detail::formatter<boost::int256::int256> {};
 
 } // namespace fmt
 
