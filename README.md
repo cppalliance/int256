@@ -1,5 +1,5 @@
 # Boost.Int256
-Portable implementation of 256-bit integers
+Portable implementation of unsigned and signed 256-bit integers
 
 |                  | Master                                                                                                                                                            |   Develop   |
 |------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------|-------------|
@@ -48,23 +48,25 @@ as well as emulated PPC64LE using QEMU with the following compilers:
 
 # Synopsis
 
-Int256 provides one type:
+Int256 provides two types:
 
 ```cpp
 namespace boost {
 namespace int256 {
 
 struct uint256;
+struct int256;
 
 } //namespace int256
 } //namespace boost
 ```
 
-A signed `int256` is planned for a following release, and will use the same
-header layout, macro names, and word order.
+`int256` shares `uint256`'s layout (`std::uint64_t words[4]`, interpreted as
+two's complement), header set, and macro names, so a value can be converted
+between the two types with a plain bit copy.
 
-The type operates like a built-in integer type.
-It has its own implementations of the Standard-Library functions
+Both types operate like a built-in integer type.
+Each has its own implementations of the Standard-Library functions
 (e.g., like those found in `<limits>`, `<iostream>`, `<bit>` etc.).
 
 The entire library can be conveniently included with `#include <boost/int256.hpp>`
