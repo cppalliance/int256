@@ -41,7 +41,7 @@ namespace
 
 std::mt19937_64 rng {42};
 
-constexpr uint256 one {UINT64_C(0), UINT64_C(0), UINT64_C(0), UINT64_C(1)};
+constexpr uint256 u256_one {UINT64_C(0), UINT64_C(0), UINT64_C(0), UINT64_C(1)};
 constexpr uint256 two_64 {UINT64_C(0), UINT64_C(0), UINT64_C(1), UINT64_C(0)};
 constexpr uint256 two_128 {UINT64_C(0), UINT64_C(1), UINT64_C(0), UINT64_C(0)};
 
@@ -110,7 +110,7 @@ void test_wide_common_factors()
         for (unsigned j {0}; j < 256U; j += 37U)
         {
             const auto smaller {i < j ? i : j};
-            BOOST_TEST_EQ(gcd(one << i, one << j), one << smaller);
+            BOOST_TEST_EQ(gcd(u256_one << i, u256_one << j), u256_one << smaller);
         }
     }
 
@@ -129,9 +129,9 @@ void test_wide_common_factors()
     }
 
     // 2^128 and 2^128 + 1 are coprime, so the answer really is 1 here.
-    BOOST_TEST_EQ(gcd(two_128, two_128 + 1U), one);
-    BOOST_TEST_EQ(gcd(two_64, two_64 + 1U), one);
-    BOOST_TEST_EQ(gcd(two_64 - 1U, two_64), one);
+    BOOST_TEST_EQ(gcd(two_128, two_128 + 1U), u256_one);
+    BOOST_TEST_EQ(gcd(two_64, two_64 + 1U), u256_one);
+    BOOST_TEST_EQ(gcd(two_64 - 1U, two_64), u256_one);
 
     // And the maximum against a wide factor of itself. 2^256 - 1 is divisible by
     // 2^64 - 1, verified against multiprecision.
@@ -150,9 +150,9 @@ void test_zero_and_one()
     BOOST_TEST_EQ(gcd(uint256_max(), uint256{}), uint256_max());
 
     // gcd(x, 1) is 1.
-    BOOST_TEST_EQ(gcd(v, one), one);
-    BOOST_TEST_EQ(gcd(one, v), one);
-    BOOST_TEST_EQ(gcd(one, one), one);
+    BOOST_TEST_EQ(gcd(v, u256_one), u256_one);
+    BOOST_TEST_EQ(gcd(u256_one, v), u256_one);
+    BOOST_TEST_EQ(gcd(u256_one, u256_one), u256_one);
 
     // lcm with zero is zero.
     BOOST_TEST_EQ(lcm(v, uint256{}), uint256{});
@@ -160,15 +160,15 @@ void test_zero_and_one()
     BOOST_TEST_EQ(lcm(uint256{}, uint256{}), uint256{});
 
     // lcm with one is the other operand.
-    BOOST_TEST_EQ(lcm(v, one), v);
-    BOOST_TEST_EQ(lcm(one, v), v);
+    BOOST_TEST_EQ(lcm(v, u256_one), v);
+    BOOST_TEST_EQ(lcm(u256_one, v), v);
 }
 
 void test_known_answers()
 {
     BOOST_TEST_EQ(gcd(uint256{12U}, uint256{18U}), uint256{6U});
     BOOST_TEST_EQ(gcd(uint256{18U}, uint256{12U}), uint256{6U});
-    BOOST_TEST_EQ(gcd(uint256{17U}, uint256{5U}), one);
+    BOOST_TEST_EQ(gcd(uint256{17U}, uint256{5U}), u256_one);
     BOOST_TEST_EQ(gcd(uint256{100U}, uint256{75U}), uint256{25U});
     BOOST_TEST_EQ(gcd(uint256{270U}, uint256{192U}), uint256{6U});
 
@@ -200,7 +200,7 @@ void check_properties(const uint256& a, const uint256& b)
         BOOST_TEST_EQ(b % g, uint256{});
 
         // And dividing both by it leaves them coprime.
-        BOOST_TEST_EQ(gcd(a / g, b / g), (a == 0U && b == 0U) ? uint256{} : one);
+        BOOST_TEST_EQ(gcd(a / g, b / g), (a == 0U && b == 0U) ? uint256{} : u256_one);
     }
     else
     {

@@ -38,7 +38,7 @@ namespace
 
 std::mt19937_64 rng {42};
 
-constexpr uint256 one {UINT64_C(0), UINT64_C(0), UINT64_C(0), UINT64_C(1)};
+constexpr uint256 u256_one {UINT64_C(0), UINT64_C(0), UINT64_C(0), UINT64_C(1)};
 
 #if defined(BOOST_INT256_TEST_HAS_SIGNED)
 constexpr int256 min_i {INT64_MIN, UINT64_C(0), UINT64_C(0), UINT64_C(0)};
@@ -75,7 +75,7 @@ void check_isqrt(const uint256& n)
     #endif
 
     // The root never exceeds 2^128 - 1, since (2^128)^2 is already 2^256.
-    BOOST_TEST(r <= (one << 128U) - 1U);
+    BOOST_TEST(r <= (u256_one << 128U) - 1U);
 }
 
 void test_known_answers()
@@ -93,7 +93,7 @@ void test_known_answers()
     BOOST_TEST_EQ(isqrt(uint256{100U}), uint256{10U});
 
     // The maximum: its root is 2^128 - 1, because (2^128 - 1)^2 < 2^256 - 1.
-    BOOST_TEST_EQ(isqrt(uint256_max()), (one << 128U) - 1U);
+    BOOST_TEST_EQ(isqrt(uint256_max()), (u256_one << 128U) - 1U);
 }
 
 // Perfect squares, and the values either side of them, which is where an off by
@@ -103,19 +103,19 @@ void test_perfect_squares()
     // Every 2^(2k) has an exact root of 2^k.
     for (unsigned k {0}; k < 128U; ++k)
     {
-        const uint256 square {one << (2U * k)};
-        BOOST_TEST_EQ(isqrt(square), one << k);
+        const uint256 square {u256_one << (2U * k)};
+        BOOST_TEST_EQ(isqrt(square), u256_one << k);
 
         // One below a perfect square rounds down to root - 1.
         if (k > 0U)
         {
-            BOOST_TEST_EQ(isqrt(square - 1U), (one << k) - 1U);
+            BOOST_TEST_EQ(isqrt(square - 1U), (u256_one << k) - 1U);
         }
 
         // And one above still gives root.
         if (2U * k < 255U)
         {
-            BOOST_TEST_EQ(isqrt(square + 1U), one << k);
+            BOOST_TEST_EQ(isqrt(square + 1U), u256_one << k);
         }
     }
 
@@ -154,7 +154,7 @@ void test_powers_of_two_minus_one()
 {
     for (unsigned k {1}; k <= 256U; ++k)
     {
-        const uint256 value {k == 256U ? uint256_max() : (one << k) - 1U};
+        const uint256 value {k == 256U ? uint256_max() : (u256_one << k) - 1U};
         check_isqrt(value);
 
         if (boost::detail::test_errors() != 0)
@@ -265,15 +265,15 @@ void test_perfect_squares_i()
 {
     for (unsigned k {0}; k < 127U; ++k)
     {
-        const int256 square {static_cast<int256>(one << (2U * k))};
-        BOOST_TEST(isqrt(square) == static_cast<int256>(one << k));
+        const int256 square {static_cast<int256>(u256_one << (2U * k))};
+        BOOST_TEST(isqrt(square) == static_cast<int256>(u256_one << k));
 
         if (k > 0U)
         {
-            BOOST_TEST(isqrt(square - 1) == static_cast<int256>((one << k) - 1U));
+            BOOST_TEST(isqrt(square - 1) == static_cast<int256>((u256_one << k) - 1U));
         }
 
-        BOOST_TEST(isqrt(square + 1) == static_cast<int256>(one << k));
+        BOOST_TEST(isqrt(square + 1) == static_cast<int256>(u256_one << k));
 
         if (boost::detail::test_errors() != 0)
         {

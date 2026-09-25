@@ -27,7 +27,7 @@ namespace
 
 std::mt19937_64 rng {42};
 
-constexpr uint256 one {UINT64_C(0), UINT64_C(0), UINT64_C(0), UINT64_C(1)};
+constexpr uint256 u256_one {UINT64_C(0), UINT64_C(0), UINT64_C(0), UINT64_C(1)};
 
 #ifndef BOOST_INT256_ORACLE_UNAVAILABLE
 
@@ -75,18 +75,18 @@ void test_clamps()
     const auto max {uint256_max()};
 
     // Addition at the top.
-    BOOST_TEST_EQ(saturating_add(max, one), max);
-    BOOST_TEST_EQ(max + one, uint256{});                 // the operator wraps
+    BOOST_TEST_EQ(saturating_add(max, u256_one), max);
+    BOOST_TEST_EQ(max + u256_one, uint256{});                 // the operator wraps
     BOOST_TEST_EQ(saturating_add(max, max), max);
     BOOST_TEST_EQ(saturating_add(max, uint256{}), max);
-    BOOST_TEST_EQ(saturating_add(max - 1U, one), max);
-    BOOST_TEST_EQ(saturating_add(max - 2U, one), max - 1U);
+    BOOST_TEST_EQ(saturating_add(max - 1U, u256_one), max);
+    BOOST_TEST_EQ(saturating_add(max - 2U, u256_one), max - 1U);
     BOOST_TEST_EQ(saturating_add(uint256{}, uint256{}), uint256{});
 
     // Subtraction at the bottom.
-    BOOST_TEST_EQ(saturating_sub(uint256{}, one), uint256{});
-    BOOST_TEST_EQ(uint256{} - one, max);                 // the operator wraps
-    BOOST_TEST_EQ(saturating_sub(one, uint256{2U}), uint256{});
+    BOOST_TEST_EQ(saturating_sub(uint256{}, u256_one), uint256{});
+    BOOST_TEST_EQ(uint256{} - u256_one, max);                 // the operator wraps
+    BOOST_TEST_EQ(saturating_sub(u256_one, uint256{2U}), uint256{});
     BOOST_TEST_EQ(saturating_sub(uint256{5U}, uint256{5U}), uint256{});
     BOOST_TEST_EQ(saturating_sub(uint256{5U}, uint256{3U}), uint256{2U});
     BOOST_TEST_EQ(saturating_sub(max, max), uint256{});
@@ -96,22 +96,22 @@ void test_clamps()
     BOOST_TEST_EQ(saturating_mul(max, uint256{2U}), max);
     BOOST_TEST_EQ(max * uint256{2U}, max - 1U);          // the operator wraps
     BOOST_TEST_EQ(saturating_mul(max, max), max);
-    BOOST_TEST_EQ(saturating_mul(max, one), max);
+    BOOST_TEST_EQ(saturating_mul(max, u256_one), max);
     BOOST_TEST_EQ(saturating_mul(max, uint256{}), uint256{});
     BOOST_TEST_EQ(saturating_mul(uint256{}, max), uint256{});
 
     // 2^128 squared is exactly 2^256, one past the range.
-    BOOST_TEST_EQ(saturating_mul(one << 128U, one << 128U), max);
-    BOOST_TEST_EQ(saturating_mul(one << 127U, one << 128U), one << 255U);
-    BOOST_TEST_EQ(saturating_mul(one << 255U, uint256{2U}), max);
+    BOOST_TEST_EQ(saturating_mul(u256_one << 128U, u256_one << 128U), max);
+    BOOST_TEST_EQ(saturating_mul(u256_one << 127U, u256_one << 128U), u256_one << 255U);
+    BOOST_TEST_EQ(saturating_mul(u256_one << 255U, uint256{2U}), max);
 
     // Just below the overflow: (2^128 - 1)^2 fits.
-    BOOST_TEST_EQ(saturating_mul((one << 128U) - 1U, (one << 128U) - 1U),
-                  ((one << 128U) - 1U) * ((one << 128U) - 1U));
+    BOOST_TEST_EQ(saturating_mul((u256_one << 128U) - 1U, (u256_one << 128U) - 1U),
+                  ((u256_one << 128U) - 1U) * ((u256_one << 128U) - 1U));
 
     // Division never saturates.
-    BOOST_TEST_EQ(saturating_div(max, one), max);
-    BOOST_TEST_EQ(saturating_div(max, max), one);
+    BOOST_TEST_EQ(saturating_div(max, u256_one), max);
+    BOOST_TEST_EQ(saturating_div(max, max), u256_one);
     BOOST_TEST_EQ(saturating_div(uint256{}, max), uint256{});
 }
 
@@ -124,7 +124,7 @@ void check_cast()
 {
     // A value inside the target range comes through unchanged.
     BOOST_TEST_EQ(saturating_cast<T>(uint256{}), static_cast<T>(0));
-    BOOST_TEST_EQ(saturating_cast<T>(one), static_cast<T>(1));
+    BOOST_TEST_EQ(saturating_cast<T>(u256_one), static_cast<T>(1));
 
     const auto target_max {(std::numeric_limits<T>::max)()};
     BOOST_TEST_EQ(saturating_cast<T>(uint256{static_cast<std::uint64_t>(target_max)}), target_max);

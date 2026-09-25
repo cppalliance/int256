@@ -38,7 +38,7 @@ namespace
 
 std::mt19937_64 rng {42};
 
-constexpr uint256 one {UINT64_C(0), UINT64_C(0), UINT64_C(0), UINT64_C(1)};
+constexpr uint256 u256_one {UINT64_C(0), UINT64_C(0), UINT64_C(0), UINT64_C(1)};
 
 #if defined(BOOST_INT256_TEST_HAS_SIGNED)
 constexpr int256 min_i {INT64_MIN, UINT64_C(0), UINT64_C(0), UINT64_C(0)};
@@ -97,26 +97,26 @@ void check_ipow(const uint256& base, std::uint64_t exp)
 
 void test_known_answers()
 {
-    BOOST_TEST_EQ(ipow(uint256{2U}, 0U), one);
+    BOOST_TEST_EQ(ipow(uint256{2U}, 0U), u256_one);
     BOOST_TEST_EQ(ipow(uint256{2U}, 1U), uint256{2U});
     BOOST_TEST_EQ(ipow(uint256{2U}, 10U), uint256{1024U});
     BOOST_TEST_EQ(ipow(uint256{3U}, 5U), uint256{243U});
     BOOST_TEST_EQ(ipow(uint256{10U}, 19U), uint256{UINT64_C(10000000000000000000)});
 
     // Anything to the zero is one, including zero.
-    BOOST_TEST_EQ(ipow(uint256{}, 0U), one);
-    BOOST_TEST_EQ(ipow(uint256_max(), 0U), one);
+    BOOST_TEST_EQ(ipow(uint256{}, 0U), u256_one);
+    BOOST_TEST_EQ(ipow(uint256_max(), 0U), u256_one);
 
     // Zero to a positive power is zero, and one to any power is one.
     BOOST_TEST_EQ(ipow(uint256{}, 1U), uint256{});
     BOOST_TEST_EQ(ipow(uint256{}, 1000U), uint256{});
-    BOOST_TEST_EQ(ipow(one, 0U), one);
-    BOOST_TEST_EQ(ipow(one, UINT64_MAX), one);
+    BOOST_TEST_EQ(ipow(u256_one, 0U), u256_one);
+    BOOST_TEST_EQ(ipow(u256_one, UINT64_MAX), u256_one);
 
     // 2^k for every representable k, which is the exact boundary of the range.
     for (std::uint64_t k {0}; k < 256U; ++k)
     {
-        BOOST_TEST_EQ(ipow(uint256{2U}, k), one << static_cast<unsigned>(k));
+        BOOST_TEST_EQ(ipow(uint256{2U}, k), u256_one << static_cast<unsigned>(k));
     }
 
     // 2^256 wraps to zero, and so does every higher power.
@@ -135,7 +135,7 @@ void test_known_answers()
     }
 
     // The maximum squared is one, since (2^256 - 1)^2 == 1 modulo 2^256.
-    BOOST_TEST_EQ(ipow(uint256_max(), 2U), one);
+    BOOST_TEST_EQ(ipow(uint256_max(), 2U), u256_one);
     BOOST_TEST_EQ(ipow(uint256_max(), 1U), uint256_max());
     BOOST_TEST_EQ(ipow(uint256_max(), 3U), uint256_max());
 }
@@ -172,7 +172,7 @@ void test_random()
         {
             const auto shift {static_cast<unsigned>(rng() % 64U)};
             const auto exp {static_cast<std::uint64_t>(rng() % 10U)};
-            check_ipow(one << shift, exp);
+            check_ipow(u256_one << shift, exp);
         }
 
         if (boost::detail::test_errors() != 0)
@@ -327,7 +327,7 @@ void test_random_i()
         {
             const auto shift {static_cast<unsigned>(rng() % 64U)};
             const auto exp {static_cast<std::uint64_t>(rng() % 10U)};
-            check_ipow_i(static_cast<int256>(one << shift), exp);
+            check_ipow_i(static_cast<int256>(u256_one << shift), exp);
         }
 
         if (boost::detail::test_errors() != 0)

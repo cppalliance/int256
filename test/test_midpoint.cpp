@@ -39,7 +39,7 @@ namespace
 
 std::mt19937_64 rng {42};
 
-constexpr uint256 one {UINT64_C(0), UINT64_C(0), UINT64_C(0), UINT64_C(1)};
+constexpr uint256 u256_one {UINT64_C(0), UINT64_C(0), UINT64_C(0), UINT64_C(1)};
 
 #if defined(BOOST_INT256_TEST_HAS_SIGNED)
 constexpr int256 min_i {INT64_MIN, UINT64_C(0), UINT64_C(0), UINT64_C(0)};
@@ -62,7 +62,7 @@ void check_midpoint(const uint256& a, const uint256& b)
     const auto to_b {m > b ? m - b : b - m};
 
     BOOST_TEST(to_a <= to_b);
-    BOOST_TEST(to_b - to_a <= one);
+    BOOST_TEST(to_b - to_a <= u256_one);
 
     #ifndef BOOST_INT256_ORACLE_UNAVAILABLE
     // Against the reference, where the sum cannot wrap because the reference
@@ -100,7 +100,7 @@ void test_no_overflow()
     // integers and the rounding direction decides which one comes out.
     BOOST_TEST_EQ(midpoint(max, uint256{}), (max / 2U) + 1U);
     BOOST_TEST_EQ(midpoint(uint256{}, max), max / 2U);
-    BOOST_TEST_EQ(midpoint(max, one), (max / 2U) + 1U);
+    BOOST_TEST_EQ(midpoint(max, u256_one), (max / 2U) + 1U);
     BOOST_TEST_EQ(midpoint(max - 1U, max), max - 1U);
     BOOST_TEST_EQ(midpoint(max, max - 1U), max);
 
@@ -112,7 +112,7 @@ void test_no_overflow()
     // Across every word boundary.
     for (unsigned k {1}; k < 256U; ++k)
     {
-        const uint256 power {one << k};
+        const uint256 power {u256_one << k};
         BOOST_TEST_EQ(midpoint(uint256{}, power), power / 2U);
         BOOST_TEST_EQ(midpoint(power, power), power);
         check_midpoint(power - 1U, power);
@@ -246,7 +246,7 @@ void test_extremes_i()
     // Across every word boundary, both signs.
     for (unsigned k {1}; k < 255U; ++k)
     {
-        const int256 power {static_cast<int256>(one << k)};
+        const int256 power {static_cast<int256>(u256_one << k)};
         check_midpoint_i(int256{}, power);
         check_midpoint_i(power, power);
         check_midpoint_i(-power, power);

@@ -35,7 +35,7 @@ namespace
 
 std::mt19937_64 rng {42};
 
-constexpr uint256 one {UINT64_C(0), UINT64_C(0), UINT64_C(0), UINT64_C(1)};
+constexpr uint256 u256_one {UINT64_C(0), UINT64_C(0), UINT64_C(0), UINT64_C(1)};
 
 void check_addmod(const uint256& a, const uint256& b, const uint256& m)
 {
@@ -109,7 +109,7 @@ void test_overflowing_sums()
 
         // And the extreme: m - 1 plus m - 1, which is the largest legal sum.
         check_addmod(m - 1U, m - 1U, m);
-        check_addmod(m - 1U, one % m, m);
+        check_addmod(m - 1U, u256_one % m, m);
         check_addmod(uint256{}, m - 1U, m);
         check_addmod(m - 1U, uint256{}, m);
     }

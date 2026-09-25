@@ -44,11 +44,11 @@ namespace
 std::mt19937_64 rng {42};
 
 // The maximum needs 256 characters in base 2, plus room to detect an overrun.
-constexpr std::size_t buffer_size {300};
+constexpr std::size_t chars_buffer_size {300};
 
 std::string to_string_in_base(const uint256& v, int base, bool* ok)
 {
-    char buffer[buffer_size] {};
+    char buffer[chars_buffer_size] {};
     const auto r {boost::charconv::to_chars(buffer, buffer + sizeof(buffer), v, base)};
 
     if (ok != nullptr)
@@ -405,7 +405,7 @@ void test_traits()
 
 std::string to_string_in_base_i(const int256& v, int base, bool* ok)
 {
-    char buffer[buffer_size] {};
+    char buffer[chars_buffer_size] {};
     const auto r {boost::charconv::to_chars(buffer, buffer + sizeof(buffer), v, base)};
 
     if (ok != nullptr)
@@ -499,7 +499,7 @@ void test_signed_random_round_trips()
     {
         const int256 v {random_int256(rng, shape::word4, sign::mixed)};
 
-        char buffer[buffer_size] {};
+        char buffer[chars_buffer_size] {};
         const auto to_r {boost::charconv::to_chars(buffer, buffer + sizeof(buffer), v)};
         BOOST_TEST(to_r);
 

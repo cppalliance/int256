@@ -27,7 +27,7 @@ namespace
 
 std::mt19937_64 rng {42};
 
-constexpr uint256 one {UINT64_C(0), UINT64_C(0), UINT64_C(0), UINT64_C(1)};
+constexpr uint256 u256_one {UINT64_C(0), UINT64_C(0), UINT64_C(0), UINT64_C(1)};
 
 //=====================================
 // Into a uint256 target
@@ -85,7 +85,7 @@ void test_uint256_target_known_answers()
     }
     {
         uint256 result {};
-        BOOST_TEST(ckd_add(&result, max, one));
+        BOOST_TEST(ckd_add(&result, max, u256_one));
         BOOST_TEST_EQ(result, uint256{});           // the wrapped value is still stored
     }
     {
@@ -95,7 +95,7 @@ void test_uint256_target_known_answers()
     }
     {
         uint256 result {};
-        BOOST_TEST(!ckd_add(&result, max - 1U, one));
+        BOOST_TEST(!ckd_add(&result, max - 1U, u256_one));
         BOOST_TEST_EQ(result, max);
     }
     {
@@ -105,7 +105,7 @@ void test_uint256_target_known_answers()
     }
     {
         uint256 result {};
-        BOOST_TEST(ckd_sub(&result, uint256{}, one));
+        BOOST_TEST(ckd_sub(&result, uint256{}, u256_one));
         BOOST_TEST_EQ(result, max);
     }
     {
@@ -126,20 +126,20 @@ void test_uint256_target_known_answers()
     {
         // 2^128 squared is exactly 2^256, the first product that does not fit.
         uint256 result {};
-        BOOST_TEST(ckd_mul(&result, one << 128U, one << 128U));
+        BOOST_TEST(ckd_mul(&result, u256_one << 128U, u256_one << 128U));
         BOOST_TEST_EQ(result, uint256{});
 
         // And (2^128 - 1) squared does fit.
         uint256 fits {};
-        BOOST_TEST(!ckd_mul(&fits, (one << 128U) - 1U, (one << 128U) - 1U));
-        BOOST_TEST_EQ(fits, ((one << 128U) - 1U) * ((one << 128U) - 1U));
+        BOOST_TEST(!ckd_mul(&fits, (u256_one << 128U) - 1U, (u256_one << 128U) - 1U));
+        BOOST_TEST_EQ(fits, ((u256_one << 128U) - 1U) * ((u256_one << 128U) - 1U));
     }
     {
         // Multiplying by zero or one never overflows.
         uint256 result {};
         BOOST_TEST(!ckd_mul(&result, max, uint256{}));
         BOOST_TEST_EQ(result, uint256{});
-        BOOST_TEST(!ckd_mul(&result, max, one));
+        BOOST_TEST(!ckd_mul(&result, max, u256_one));
         BOOST_TEST_EQ(result, max);
     }
 }
