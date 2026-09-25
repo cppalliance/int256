@@ -25,9 +25,11 @@ using test_type = boost::int256::uint256;
 
 using namespace boost::int256::literals;
 
-// Each thread evaluates one literal case on the device. The groups cover the raw literal
-// operator with values too large for unsigned long long, the cooked string literal
-// operator, and the raw literal operator with small values, in both spellings.
+// Each thread evaluates one literal case on the device. The groups cover the cooked
+// string literal operator with values too large for unsigned long long (once spelled
+// as a raw literal, but nvcc's lexer warns on a bare integer constant that size), the
+// cooked string literal operator with values that fit in unsigned long long, and the
+// raw literal operator with small values, in both spellings.
 constexpr int num_tests {24};
 
 __global__ void cuda_test(test_type* out)
@@ -36,15 +38,18 @@ __global__ void cuda_test(test_type* out)
 
     switch (i)
     {
-        // Raw literal operator, with values too large for unsigned long long
-        case 0: out[0] = 18446744073709551616_u256; break;
-        case 1: out[1] = 340282366920938463463374607431768211456_u256; break;
-        case 2: out[2] = 6277101735386680763835789423207666416102355444464034512896_u256; break;
-        case 3: out[3] = 115792089237316195423570985008687907853269984665640564039457584007913129639935_u256; break;
-        case 4: out[4] = 18446744073709551616_U256; break;
-        case 5: out[5] = 340282366920938463463374607431768211456_U256; break;
-        case 6: out[6] = 6277101735386680763835789423207666416102355444464034512896_U256; break;
-        case 7: out[7] = 115792089237316195423570985008687907853269984665640564039457584007913129639935_U256; break;
+        // Values too large for unsigned long long, as a quoted string literal. A bare
+        // integer constant this size raises nvcc warning #23-D ("integer constant is too
+        // large") before the raw literal operator ever sees it, so these stay in string
+        // form on the device, matching Boost.Int128's GPU tests.
+        case 0: out[0] = "18446744073709551616"_u256; break;
+        case 1: out[1] = "340282366920938463463374607431768211456"_u256; break;
+        case 2: out[2] = "6277101735386680763835789423207666416102355444464034512896"_u256; break;
+        case 3: out[3] = "115792089237316195423570985008687907853269984665640564039457584007913129639935"_u256; break;
+        case 4: out[4] = "18446744073709551616"_U256; break;
+        case 5: out[5] = "340282366920938463463374607431768211456"_U256; break;
+        case 6: out[6] = "6277101735386680763835789423207666416102355444464034512896"_U256; break;
+        case 7: out[7] = "115792089237316195423570985008687907853269984665640564039457584007913129639935"_U256; break;
 
         // Cooked string literal operator
         case 8: out[8] = "0"_u256; break;
@@ -92,15 +97,16 @@ int main()
 
     // The same literals, evaluated on the host
     test_type expected[num_tests];
-    // Raw literal operator, with values too large for unsigned long long
-    expected[0] = 18446744073709551616_u256;
-    expected[1] = 340282366920938463463374607431768211456_u256;
-    expected[2] = 6277101735386680763835789423207666416102355444464034512896_u256;
-    expected[3] = 115792089237316195423570985008687907853269984665640564039457584007913129639935_u256;
-    expected[4] = 18446744073709551616_U256;
-    expected[5] = 340282366920938463463374607431768211456_U256;
-    expected[6] = 6277101735386680763835789423207666416102355444464034512896_U256;
-    expected[7] = 115792089237316195423570985008687907853269984665640564039457584007913129639935_U256;
+    // Raw literal operator, with values too large for unsigned long long, as a quoted
+    // string literal; see the comment in the kernel above.
+    expected[0] = "18446744073709551616"_u256;
+    expected[1] = "340282366920938463463374607431768211456"_u256;
+    expected[2] = "6277101735386680763835789423207666416102355444464034512896"_u256;
+    expected[3] = "115792089237316195423570985008687907853269984665640564039457584007913129639935"_u256;
+    expected[4] = "18446744073709551616"_U256;
+    expected[5] = "340282366920938463463374607431768211456"_U256;
+    expected[6] = "6277101735386680763835789423207666416102355444464034512896"_U256;
+    expected[7] = "115792089237316195423570985008687907853269984665640564039457584007913129639935"_U256;
 
     // Cooked string literal operator
     expected[8] = "0"_u256;

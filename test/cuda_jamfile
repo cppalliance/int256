@@ -10,17 +10,28 @@ project : requirements
     ;
 
 run test_unsigned_add.cu ;
+run test_signed_add.cu ;
 run test_unsigned_sub.cu ;
+run test_signed_sub.cu ;
 run test_unsigned_mul.cu ;
+run test_signed_mul.cu ;
 run test_unsigned_div.cu ;
+run test_signed_div.cu ;
 run test_unsigned_mod.cu ;
+run test_signed_mod.cu ;
 
 run test_unsigned_or.cu ;
+run test_signed_or.cu ;
 run test_unsigned_and.cu ;
+run test_signed_and.cu ;
 run test_unsigned_xor.cu ;
+run test_signed_xor.cu ;
 run test_unsigned_not.cu ;
+run test_signed_not.cu ;
 run test_unsigned_left_shift.cu ;
+run test_signed_left_shift.cu ;
 run test_unsigned_right_shift.cu ;
+run test_signed_right_shift.cu ;
 
 run test_has_single_bit.cu ;
 run test_countl_zero.cu ;
@@ -36,38 +47,64 @@ run test_popcount.cu ;
 run test_byteswap.cu ;
 
 run test_unsigned_byte_order.cu ;
+run test_signed_byte_order.cu ;
 run test_unsigned_byte_arrays.cu ;
+run test_signed_byte_arrays.cu ;
 
 run test_unsigned_eq.cu ;
+run test_signed_eq.cu ;
 run test_unsigned_ne.cu ;
+run test_signed_ne.cu ;
 run test_unsigned_lt.cu ;
+run test_signed_lt.cu ;
 run test_unsigned_le.cu ;
+run test_signed_le.cu ;
 run test_unsigned_gt.cu ;
+run test_signed_gt.cu ;
 run test_unsigned_ge.cu ;
+run test_signed_ge.cu ;
 
 run test_unsigned_cstdlib_div.cu ;
+run test_signed_cstdlib_div.cu ;
 
 run test_unsigned_integer_conversion.cu ;
+run test_signed_to_unsigned_conversion.cu ;
+run test_unsigned_to_signed_conversion.cu ;
 
 run test_unsigned_saturating_add.cu ;
+run test_signed_saturating_add.cu ;
 run test_unsigned_saturating_sub.cu ;
+run test_signed_saturating_sub.cu ;
 run test_unsigned_saturating_mul.cu ;
+run test_signed_saturating_mul.cu ;
 run test_unsigned_saturating_div.cu ;
+run test_signed_saturating_div.cu ;
 run test_unsigned_gcd.cu ;
+run test_signed_gcd.cu ;
 run test_unsigned_lcm.cu ;
+run test_signed_lcm.cu ;
 run test_unsigned_midpoint.cu ;
+run test_signed_midpoint.cu ;
 
 run test_unsigned_to_chars.cu ;
+run test_signed_to_chars.cu ;
 run test_unsigned_from_chars.cu ;
+run test_signed_from_chars.cu ;
 run test_unsigned_to_chars_bases.cu ;
+run test_signed_to_chars_bases.cu ;
 run test_unsigned_from_chars_bases.cu ;
+run test_signed_from_chars_bases.cu ;
 
 run test_unsigned_literals.cu ;
+run test_signed_literals.cu ;
 
 # Mixed operations with a builtin floating point type
 run test_unsigned_add_float.cu ;
+run test_signed_add_float.cu ;
 run test_unsigned_mul_float.cu ;
+run test_signed_mul_float.cu ;
 run test_unsigned_lt_float.cu ;
+run test_signed_lt_float.cu ;
 
 run ../example/cuda.cu ;
 # The optional second GPU example is added when it lands (PLAN.md C.2):
