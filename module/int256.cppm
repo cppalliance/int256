@@ -41,6 +41,9 @@ module;
 // #ifndef BOOST_INT256_BUILD_MODULE guard, minus the five above that are needed
 // for their macros either way. Regenerate it after adding a guarded include with
 //   grep -rn -B1 '#include <' include | grep -A1 BUILD_MODULE
+// <stdfloat> below is the one exception: it is itself conditionally included in
+// every header that uses it, so the grep recipe above will not surface it (or
+// reproduce its condition) on its own. Add and maintain that block by hand.
 #ifndef BOOST_INT256_USE_STD_MODULE
 
 #include <array>
@@ -57,6 +60,12 @@ module;
 #include <string>
 #include <tuple>
 #include <type_traits>
+
+// Unlike its neighbours above, this one is conditional: <stdfloat> only exists from
+// C++23, and only when the standard library ships it.
+#if (__cplusplus > 202002L || (defined(_MSVC_LANG) && _MSVC_LANG > 202002L)) && defined(__has_include) && __has_include(<stdfloat>)
+#include <stdfloat>
+#endif
 
 #endif
 
@@ -80,6 +89,7 @@ extern "C++" {
 export namespace boost::int256 {
 
 struct uint256;
+struct int256;
 
 } // namespace boost::int256
 
@@ -87,6 +97,9 @@ export namespace std {
 
 template <>
 class numeric_limits<boost::int256::uint256>;
+
+template <>
+class numeric_limits<boost::int256::int256>;
 
 } // namespace std
 

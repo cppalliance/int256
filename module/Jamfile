@@ -42,6 +42,7 @@ run ../test/test_int_div.cpp int256 : : : <dependency>int256 ;
 run ../test/test_ipow.cpp int256 : : : <dependency>int256 ;
 run ../test/test_isqrt.cpp int256 : : : <dependency>int256 ;
 run ../test/test_limits_u256.cpp int256 : : : <dependency>int256 ;
+run ../test/test_limits_i256.cpp int256 : : : <dependency>int256 ;
 run ../test/test_literals.cpp int256 : : : <dependency>int256 ;
 run ../test/test_midpoint.cpp int256 : : : <dependency>int256 ;
 run ../test/test_powm.cpp int256 : : : <dependency>int256 ;

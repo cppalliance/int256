@@ -19,5 +19,9 @@ int main()
     a += 42U;
     std::cout << a << std::endl;
 
+    int256 b {int256{-1, 0, 0, 0} >> 1};
+    b -= 42;
+    std::cout << b << std::endl;
+
     return 0;
 }

@@ -67,6 +67,7 @@ set(BOOST_INT256_MODULE_TESTS
         test_ipow
         test_isqrt
         test_limits_u256
+        test_limits_i256
         test_literals
         test_midpoint
         test_powm
