@@ -214,7 +214,7 @@ template <typename T>
 void test_agreement()
 {
     const T operands[] {
-        T{0}, T{1}, T{2}, T{-1}, T{0.5}, T{-0.5}, T{1e10}, T{-1e10},
+        T{0}, T{1}, T{2}, T{-1}, static_cast<T>(0.5), static_cast<T>(-0.5), static_cast<T>(1e10), static_cast<T>(-1e10),
         static_cast<T>(3.14159), static_cast<T>(1) / T{3}
     };
 
@@ -590,7 +590,7 @@ template <typename T>
 void test_signed_agreement()
 {
     const T operands[] {
-        T{0}, T{1}, T{2}, T{-1}, T{0.5}, T{-0.5}, T{1e10}, T{-1e10},
+        T{0}, T{1}, T{2}, T{-1}, static_cast<T>(0.5), static_cast<T>(-0.5), static_cast<T>(1e10), static_cast<T>(-1e10),
         static_cast<T>(3.14159), static_cast<T>(1) / T{3}
     };
 

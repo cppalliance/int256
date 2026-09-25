@@ -44,7 +44,16 @@ if(HAVE_BOOST_TEST)
 
     else()
 
-        boost_test_jamfile(FILE Jamfile LINK_LIBRARIES Boost::int256 Boost::int128 Boost::core Boost::random Boost::multiprecision Boost::mp11 Boost::charconv Boost::container_hash Boost::unordered)
+        # icpx 2026.1 miscompiles std::format with any user-defined formatter: its HIR dead
+        # store elimination treats a temporary whose address only escapes into the format
+        # argument store as region local, drops the stores that initialize it, and the
+        # formatter then reads stale stack memory. The flag turns off just that deduction.
+        set(BOOST_INT256_TEST_COMPILE_OPTIONS "")
+        if(CMAKE_CXX_COMPILER_ID STREQUAL "IntelLLVM")
+            set(BOOST_INT256_TEST_COMPILE_OPTIONS -mllvm -hir-dead-store-elimination-deduce-region-local-alloca=false)
+        endif()
+
+        boost_test_jamfile(FILE Jamfile LINK_LIBRARIES Boost::int256 Boost::int128 Boost::core Boost::random Boost::multiprecision Boost::mp11 Boost::charconv Boost::container_hash Boost::unordered COMPILE_OPTIONS ${BOOST_INT256_TEST_COMPILE_OPTIONS})
 
         # check_cmake_version.cpp is deliberately not built. It asserts that the CMake
         # project version equals the Boost release version, which only holds for a

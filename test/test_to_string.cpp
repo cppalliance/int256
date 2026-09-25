@@ -21,7 +21,9 @@ using boost::int256::to_wstring;
 namespace
 {
 
+#ifndef BOOST_INT256_ORACLE_UNAVAILABLE
 std::mt19937_64 rng {42};
+#endif
 
 std::wstring widen_string(const std::string& narrow)
 {
@@ -75,6 +77,7 @@ void test_wide_matches_narrow()
     BOOST_TEST_EQ(to_wstring(uint256_max()).size(), static_cast<std::size_t>(78));
 }
 
+#ifndef BOOST_INT256_ORACLE_UNAVAILABLE
 void test_against_reference()
 {
     for (const auto& v : edge_values())
@@ -97,6 +100,7 @@ void test_against_reference()
         }
     }
 }
+#endif
 
 // The overload is constrained to the library types, so a builtin does not pick it
 // up by accident.
@@ -156,6 +160,7 @@ void test_signed_wide_matches_narrow()
     }
 }
 
+#ifndef BOOST_INT256_ORACLE_UNAVAILABLE
 void test_signed_against_reference()
 {
     for (const auto& v : signed_edge_values())
@@ -164,8 +169,8 @@ void test_signed_against_reference()
         // magnitude, since mp_str (like to_mp) only knows uint256.
         const bool negative {v.signed_high() < 0};
         const uint256 magnitude {to_unsigned_bits(negative ? -v : v)};
-        const auto expected_text {(negative ? std::string{"-"} : std::string{}) +
-                                   mp_str(to_mp(magnitude), 10, false)};
+        const auto digits {mp_str(to_mp(magnitude), 10, false)};
+        const auto expected_text {negative ? std::string{"-"} + digits : digits};
 
         BOOST_TEST_EQ(to_string(v), expected_text);
         BOOST_TEST(to_wstring(v) == widen_string(expected_text));
@@ -181,8 +186,8 @@ void test_signed_against_reference()
 
                 const bool negative {v.signed_high() < 0};
                 const uint256 magnitude {to_unsigned_bits(negative ? -v : v)};
-                const auto expected_text {(negative ? std::string{"-"} : std::string{}) +
-                                           mp_str(to_mp(magnitude), 10, false)};
+                const auto digits {mp_str(to_mp(magnitude), 10, false)};
+                const auto expected_text {negative ? std::string{"-"} + digits : digits};
 
                 BOOST_TEST_EQ(to_string(v), expected_text);
             }
@@ -194,6 +199,7 @@ void test_signed_against_reference()
         }
     }
 }
+#endif
 
 } // namespace
 
@@ -202,11 +208,15 @@ int main()
     test_constraint();
     test_known_answers();
     test_wide_matches_narrow();
+    #ifndef BOOST_INT256_ORACLE_UNAVAILABLE
     test_against_reference();
+    #endif
 
     test_signed_known_answers();
     test_signed_wide_matches_narrow();
+    #ifndef BOOST_INT256_ORACLE_UNAVAILABLE
     test_signed_against_reference();
+    #endif
 
     return boost::report_errors();
 }

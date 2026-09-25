@@ -221,10 +221,10 @@ void check_ipow_i(const int256& base, std::uint64_t exp)
     const auto got {ipow(base, exp)};
     const auto expected {reference_ipow_i(base, exp)};
 
+    #ifndef BOOST_INT256_ORACLE_UNAVAILABLE
     BOOST_TEST(got == expected ||
                report_mismatch_i("ipow", base, base, got, to_smp(expected)));
 
-    #ifndef BOOST_INT256_ORACLE_UNAVAILABLE
     // Where the exact (unwrapped) answer fits int256's range, it is the
     // answer: no wrapping is allowed to sneak in early.
     const smp smp_min {-(smp{1} << 255)};
@@ -246,6 +246,8 @@ void check_ipow_i(const int256& base, std::uint64_t exp)
     {
         BOOST_TEST(to_smp(got) == exact);
     }
+    #else
+    BOOST_TEST(got == expected);
     #endif
 }
 

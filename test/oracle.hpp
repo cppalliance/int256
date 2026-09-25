@@ -22,9 +22,11 @@
 // old MinGW that no diagnostic switch can silence, and it needs exceptions. The
 // module build does not link Multiprecision at all, so the reference is out of
 // reach there too. A test that includes this header keeps its directed cases and
-// drops only the parts that need the reference.
+// drops only the parts that need the reference. The exception check mirrors
+// detail/config.hpp directly, since this header can be seen before config.hpp.
 #if (defined(__MINGW32__) && defined(__GNUC__) && !defined(__clang__) && (__GNUC__ < 9)) || \
-    defined(BOOST_INT256_DISABLE_EXCEPTIONS) || defined(BOOST_INT256_BUILD_MODULE)
+    defined(BOOST_INT256_DISABLE_EXCEPTIONS) || defined(BOOST_INT256_BUILD_MODULE) || \
+    (defined(_MSC_VER) && !defined(_CPPUNWIND)) || (!defined(_MSC_VER) && !defined(__EXCEPTIONS))
 #  define BOOST_INT256_ORACLE_UNAVAILABLE
 #endif
 

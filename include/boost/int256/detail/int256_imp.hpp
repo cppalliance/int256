@@ -1347,7 +1347,10 @@ BOOST_INT256_EXPORT BOOST_INT256_HOST_DEVICE BOOST_INT256_BUILTIN_CONSTEXPR int2
 BOOST_INT256_EXPORT template <typename Integer, std::enable_if_t<detail::is_any_integer_v<Integer> && (sizeof(Integer) * 8 <= 64), bool> = true>
 BOOST_INT256_HOST_DEVICE constexpr detail::promoted_t<Integer> operator<<(const Integer lhs, const int256& rhs) noexcept
 {
-    return static_cast<detail::promoted_t<Integer>>(lhs) << rhs.words[0];
+    // Shifted in the unsigned domain: a negative left operand then gets the C++20
+    // result in every language mode instead of undefined behavior before C++20
+    using promoted = detail::promoted_t<Integer>;
+    return static_cast<promoted>(static_cast<std::make_unsigned_t<promoted>>(static_cast<promoted>(lhs)) << rhs.words[0]);
 }
 
 template <BOOST_INT256_INTEGER_CONCEPT>

@@ -700,7 +700,9 @@ BOOST_INT256_HOST_DEVICE constexpr void divide(const T& lhs, const T& rhs, T& qu
 
     const auto n {impl::significant_words(rhs)};
 
-    if (n == 1U)
+    // n == 0 is division by zero (asserted above). Sending it here too keeps GCC's
+    // -Warray-bounds from following a zero word divisor into Algorithm D at -O3
+    if (n <= 1U)
     {
         // one_word_div owns the whole one word tier: the hardware 128/64 divide where there is
         // one, and otherwise the reciprocal or the half word chain, whichever the target measures

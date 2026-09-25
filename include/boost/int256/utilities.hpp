@@ -208,13 +208,14 @@ BOOST_INT256_EXPORT BOOST_INT256_HOST_DEVICE constexpr int256 powm(const int256&
         return int256{};
     }
 
-    const auto um {static_cast<uint256>(m)};
+    // Explicit types: nvcc 12.8 drops the cast from `const auto x {static_cast<T>(e)}`
+    const uint256 um {static_cast<uint256>(m)};
 
     uint256 ub {};
 
     if (base.signed_high() < 0)
     {
-        const auto magnitude {static_cast<uint256>(abs(base))};
+        const uint256 magnitude {static_cast<uint256>(abs(base))};
         const auto r {magnitude % um};
         ub = r == 0U ? uint256{} : um - r;
     }
