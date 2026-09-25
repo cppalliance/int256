@@ -138,6 +138,11 @@ struct int256
 
     #endif
 
+    // Boost.Int128's uint128 and int128, when <boost/int128.hpp> was included first;
+    // behaves exactly as the builtin 128-bit constructors above
+    template <typename Int128Type>
+    BOOST_INT256_HOST_DEVICE constexpr int256(const Int128Type v) noexcept;
+
     // Construct from floating-point types
     template <BOOST_INT256_FLOATING_POINT_CONCEPT Float>
     BOOST_INT256_HOST_DEVICE constexpr int256(Float f) noexcept;
@@ -186,6 +191,10 @@ struct int256
 
     #endif
 
+    // Boost.Int128's uint128 and int128, when <boost/int128.hpp> was included first
+    template <typename Int128Type>
+    BOOST_INT256_HOST_DEVICE constexpr operator Int128Type() const noexcept;
+
     // Conversion to floating point
     BOOST_INT256_HOST_DEVICE constexpr operator float() const noexcept;
     BOOST_INT256_HOST_DEVICE constexpr operator double() const noexcept;
@@ -200,6 +209,7 @@ All conversion operators except `operator bool()` are implicit to match the beha
 `operator bool()` is explicit so that an `int256` cannot accidentally bind to a `bool` parameter; contextual conversions (`if (x)`, `!x`, and so on) still work.
 A conversion to a narrower integer keeps the low bits (`words[0]`, reinterpreted with the target's signedness), which is what `static_cast` between built-in integers does.
 A conversion to `pass:[__int128]` or `pass:[unsigned __int128]` keeps `words[0]` and `words[1]`.
+The same holds for Boost.Int128's `uint128` and `int128`; see xref:mixed_type_ops.adoc#mixed_ops_int128[Operations With Boost.Int128 Types] for when those conversions exist and how to spell them portably.
 
 Conversions to floating-point types go through the same symmetric, correctly rounded path as the floating-point constructor: the magnitude is converted and then the sign is applied, so `BOOST_INT256_INT256_MIN` converts to exactly `-2^255^` in `double`.
 When the value does not fit the significand it is rounded once, to nearest with ties to even, and a value whose magnitude is above the range of the target type becomes an infinity of the matching sign.

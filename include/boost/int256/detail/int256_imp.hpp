@@ -103,6 +103,13 @@ BOOST_INT256_EXPORT struct int256
 
     #endif // BOOST_INT256_HAS_INT128
 
+    // Boost.Int128's uint128 and int128, behaving exactly as the builtin 128-bit
+    // constructors above. Only viable once <boost/int128.hpp> has been included before
+    // this library (see detail/int128_interop.hpp)
+    template <BOOST_INT256_DEFAULTED_INT128_INTEROP_CONCEPT>
+    BOOST_INT256_HOST_DEVICE constexpr int256(const Int128Type v) noexcept :
+        words {v.low, v.high, detail::int128_interop_fill(v), detail::int128_interop_fill(v)} {}
+
     // NaN gives 0, >= 2^255 saturates at max, <= -2^255 saturates at min, and everything
     // else truncates toward zero. Defined below, after the uint256 magnitude is available
     template <BOOST_INT256_DEFAULTED_FLOATING_POINT_CONCEPT>
@@ -177,6 +184,13 @@ BOOST_INT256_EXPORT struct int256
     }
 
     #endif // BOOST_INT256_HAS_INT128
+
+    // Keeps the low 128 bits, as the builtin 128-bit conversions above do
+    template <BOOST_INT256_DEFAULTED_INT128_INTEROP_CONCEPT>
+    BOOST_INT256_HOST_DEVICE constexpr operator Int128Type() const noexcept
+    {
+        return detail::int128_interop<Int128Type>::from_words(words[1], words[0]);
+    }
 
     // Conversion to floating point, correctly rounded to nearest with ties to even
     BOOST_INT256_HOST_DEVICE constexpr operator float() const noexcept;

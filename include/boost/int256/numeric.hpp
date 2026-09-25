@@ -49,12 +49,13 @@ struct reduced_integers
 template <typename IntegerType>
 BOOST_INT256_INLINE_CONSTEXPR bool is_reduced_integer_v {reduced_integers<IntegerType>::value ||
                                                          std::is_same<IntegerType, detail::builtin_i128>::value ||
-                                                         std::is_same<IntegerType, detail::builtin_u128>::value};
+                                                         std::is_same<IntegerType, detail::builtin_u128>::value ||
+                                                         is_int128_interop_v<IntegerType>};
 
 #else
 
 template <typename IntegerType>
-BOOST_INT256_INLINE_CONSTEXPR bool is_reduced_integer_v {reduced_integers<IntegerType>::value};
+BOOST_INT256_INLINE_CONSTEXPR bool is_reduced_integer_v {reduced_integers<IntegerType>::value || is_int128_interop_v<IntegerType>};
 
 #endif // 128-bit
 
@@ -102,7 +103,7 @@ BOOST_INT256_HOST_DEVICE constexpr TargetType saturating_cast(const uint256& val
 {
     BOOST_INT256_IF_CONSTEXPR (std::is_same<uint256, TargetType>::value)
     {
-        return static_cast<TargetType>(value);
+        return detail::convert_to<TargetType>(value);
     }
     // A uint256 target int256 source clamps to int256's max(); a negative source can
     // never occur here because value is itself unsigned
@@ -122,7 +123,7 @@ BOOST_INT256_HOST_DEVICE constexpr TargetType saturating_cast(const uint256& val
             return detail::decomposed_limits<TargetType>::max_value();
         }
 
-        return static_cast<TargetType>(value);
+        return detail::convert_to<TargetType>(value);
     }
 }
 
@@ -207,29 +208,30 @@ BOOST_INT256_HOST_DEVICE constexpr TargetType saturating_cast(const int256& valu
 {
     BOOST_INT256_IF_CONSTEXPR (std::is_same<int256, TargetType>::value)
     {
-        return static_cast<TargetType>(value);
+        return detail::convert_to<TargetType>(value);
     }
-    #if defined(BOOST_INT256_HAS_INT128) || defined(BOOST_INT256_HAS_MSVC_INT128)
-    else BOOST_INT256_IF_CONSTEXPR (std::is_same<uint256, TargetType>::value || std::is_same<detail::builtin_u128, TargetType>::value)
-    #else
+    // uint256 holds every non-negative int256, so only a negative source clamps (to 0)
     else BOOST_INT256_IF_CONSTEXPR (std::is_same<uint256, TargetType>::value)
-    #endif
     {
-        // An unsigned target can never overflow from a negative source: it clamps to 0
-        return value.signed_high() < 0 ? static_cast<TargetType>(0) : static_cast<TargetType>(value);
+        return value.signed_high() < 0 ? static_cast<TargetType>(0) : detail::convert_to<TargetType>(value);
     }
     else
     {
-        if (value > static_cast<int256>((std::numeric_limits<TargetType>::max)()))
+        // decomposed_limits rather than std::numeric_limits, which is not required to be
+        // specialized for the builtin 128-bit types
+        const int256 max_value {detail::decomposed_limits<TargetType>::max_magnitude()};
+        const int256 min_value {-int256{detail::decomposed_limits<TargetType>::min_magnitude()}};
+
+        if (value > max_value)
         {
-            return (std::numeric_limits<TargetType>::max)();
+            return detail::decomposed_limits<TargetType>::max_value();
         }
-        else if (value < static_cast<int256>((std::numeric_limits<TargetType>::min)()))
+        else if (value < min_value)
         {
-            return (std::numeric_limits<TargetType>::min)();
+            return detail::convert_to<TargetType>(min_value);
         }
 
-        return static_cast<TargetType>(value);
+        return detail::convert_to<TargetType>(value);
     }
 }
 

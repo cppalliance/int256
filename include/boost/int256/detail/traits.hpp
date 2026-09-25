@@ -103,6 +103,42 @@ struct promoted<bool>
 template <typename T>
 using promoted_t = typename promoted<T>::type;
 
+// Boost.Int128's uint128 and int128. This library never includes <boost/int128.hpp>
+// itself: detail/int128_interop.hpp specializes this for both types only when that
+// header was included first, so every Int128Type overload in this library stays inert otherwise
+template <typename T>
+struct int128_interop
+{
+    static constexpr bool value {false};
+    static constexpr bool is_signed {false};
+};
+
+template <typename T>
+BOOST_INT256_INLINE_CONSTEXPR bool is_int128_interop_v = int128_interop<T>::value;
+
+// The upper words of the 256-bit image of a Boost.Int128 value: all ones for a
+// negative int128, and zero otherwise
+template <typename Int128Type>
+BOOST_INT256_HOST_DEVICE constexpr std::uint64_t int128_interop_fill(const Int128Type v) noexcept
+{
+    return int128_interop<Int128Type>::is_signed && (v.high >> 63U) != UINT64_C(0) ? UINT64_MAX : UINT64_C(0);
+}
+
+// Converts a 256-bit value to T. Under C++14 static_cast to a Boost.Int128 type is
+// ambiguous with that type's own builtin 128-bit constructors, so it is built from the
+// low words instead
+template <typename T, typename Wide, std::enable_if_t<!is_int128_interop_v<T> || std::is_same<T, Wide>::value, bool> = true>
+BOOST_INT256_HOST_DEVICE constexpr T convert_to(const Wide& v) noexcept
+{
+    return static_cast<T>(v);
+}
+
+template <typename T, typename Wide, std::enable_if_t<is_int128_interop_v<T> && !std::is_same<T, Wide>::value, bool> = true>
+BOOST_INT256_HOST_DEVICE constexpr T convert_to(const Wide& v) noexcept
+{
+    return int128_interop<T>::from_words(v.words[1], v.words[0]);
+}
+
 // Decides if we can use a u32, u64 or builtin 128-bit implementation for some operations
 
 #ifdef BOOST_INT256_HAS_INT128
@@ -131,6 +167,9 @@ using evaluation_type_t = std::conditional_t<sizeof(T) <= sizeof(std::uint32_t),
 #define BOOST_INT256_UNSIGNED_INTEGER_CONCEPT typename UnsignedInteger, std::enable_if_t<detail::is_unsigned_integer_v<UnsignedInteger>, bool>
 #define BOOST_INT256_INTEGER_CONCEPT typename Integer, std::enable_if_t<detail::is_any_integer_v<Integer>, bool>
 #define BOOST_INT256_FLOATING_POINT_CONCEPT typename Float, std::enable_if_t<detail::is_floating_point_v<Float>, bool>
+
+#define BOOST_INT256_DEFAULTED_INT128_INTEROP_CONCEPT typename Int128Type, std::enable_if_t<detail::is_int128_interop_v<Int128Type>, bool> = true
+#define BOOST_INT256_INT128_INTEROP_CONCEPT typename Int128Type, std::enable_if_t<detail::is_int128_interop_v<Int128Type>, bool>
 
 #if defined(BOOST_INT256_HAS_INT128) || defined(BOOST_INT256_HAS_MSVC_INT128)
 

@@ -9,5 +9,6 @@
 #include <boost/int256/detail/uint256_imp.hpp>
 #include <boost/int256/detail/int256_imp.hpp>
 #include <boost/int256/detail/conversions.hpp>
+#include <boost/int256/detail/int128_interop.hpp>
 
 #endif // BOOST_INT256_INT256_HPP

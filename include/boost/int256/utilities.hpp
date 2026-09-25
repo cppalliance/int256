@@ -267,9 +267,10 @@ namespace detail {
 // The builtin 128-bit types are not std::is_integral in strict mode, so the
 // library traits decide instead.
 template <typename T>
-struct valid_checked_type : std::integral_constant<bool, (std::is_integral<T>::value || is_any_integer_v<T>) &&
-                                                         !std::is_same<T, bool>::value &&
-                                                         !std::is_same<T, char>::value> {};
+struct valid_checked_type : std::integral_constant<bool, ((std::is_integral<T>::value || is_any_integer_v<T>) &&
+                                                          !std::is_same<T, bool>::value &&
+                                                          !std::is_same<T, char>::value) ||
+                                                         is_int128_interop_v<T>> {};
 
 template <>
 struct valid_checked_type<uint256> : std::true_type {};
@@ -283,7 +284,8 @@ struct valid_checked_type<int256> : std::true_type {};
 // SignedInteger concept used to mix a builtin into int256 itself and must not also
 // match int256 (that would make int256 op int256 ambiguous with int256 op SignedInteger)
 template <typename T>
-BOOST_INT256_INLINE_CONSTEXPR bool is_signed_operand_v = is_signed_integer_v<T> || std::is_same<T, int256>::value;
+BOOST_INT256_INLINE_CONSTEXPR bool is_signed_operand_v = is_signed_integer_v<T> || std::is_same<T, int256>::value ||
+                                                        int128_interop<T>::is_signed;
 
 // The extreme values of a target type expressed as 256-bit magnitudes, so the checked
 // and comparison functions never need std::numeric_limits of a builtin 128-bit type
@@ -452,7 +454,7 @@ BOOST_INT256_HOST_DEVICE constexpr bool ckd_add(T1* result, const T2 a, const T3
 
     // The modular sum of the widened images is the exact sum mod 2^256, which
     // is all the wrapped result needs for any target no wider than 256 bits.
-    *result = static_cast<T1>(op_a.raw + op_b.raw);
+    *result = detail::convert_to<T1>(op_a.raw + op_b.raw);
 
     const auto sum {detail::ckd_signed_sum(op_a.magnitude, op_a.negative, op_b.magnitude, op_b.negative)};
     return detail::ckd_overflows<T1>(sum.magnitude, sum.negative, sum.carry);
@@ -474,7 +476,7 @@ BOOST_INT256_HOST_DEVICE constexpr bool ckd_sub(T1* result, const T2 a, const T3
     const auto op_a {detail::ckd_decompose(a)};
     const auto op_b {detail::ckd_decompose(b)};
 
-    *result = static_cast<T1>(op_a.raw - op_b.raw);
+    *result = detail::convert_to<T1>(op_a.raw - op_b.raw);
 
     // a - b is a + (-b): negating b flips its sign while keeping its magnitude.
     const auto difference {detail::ckd_signed_sum(op_a.magnitude, op_a.negative, op_b.magnitude, !op_b.negative)};
@@ -497,7 +499,7 @@ BOOST_INT256_HOST_DEVICE constexpr bool ckd_mul(T1* result, const T2 a, const T3
     const auto op_a {detail::ckd_decompose(a)};
     const auto op_b {detail::ckd_decompose(b)};
 
-    *result = static_cast<T1>(op_a.raw * op_b.raw);
+    *result = detail::convert_to<T1>(op_a.raw * op_b.raw);
 
     // The product magnitude needs more than 256 bits exactly when it exceeds
     // the 256-bit maximum. Dividing the maximum by one magnitude tests that
@@ -545,7 +547,7 @@ BOOST_INT256_INLINE_CONSTEXPR bool is_wide_type_v = std::is_same<T, uint256>::va
                                                     || std::is_same<T, builtin_i128>::value
                                                     || std::is_same<T, builtin_u128>::value
     #endif
-                                                    ;
+                                                    || is_int128_interop_v<T>;
 
 template <typename T>
 BOOST_INT256_INLINE_CONSTEXPR bool is_valid_comparison_operand_v = is_valid_comparison_type_v<T> ||

@@ -668,6 +668,48 @@ double(-2^200) = -1.6069380442589903e+60
 ----
 ====
 
+[#examples_int128_interop]
+== Boost.Int128 Interoperability
+
+.This https://github.com/cppalliance/int256/blob/develop/example/int128_interop.cpp[example] demonstrates construction, conversion, mixed arithmetic, compound assignment, shifts, and the numeric utilities between the 256-bit types and Boost.Int128's `uint128` and `int128`, which are enabled by including `<boost/int128.hpp>` before `<boost/int256.hpp>`.
+====
+[source, c++]
+----
+include::example$int128_interop.cpp[]
+----
+
+Output:
+----
+=== Construction and Conversion ===
+uint256{uint128 max}   = 340282366920938463463374607431768211455
+int256{int128{-42}}    = -42
+uint256{int128{-1}} is uint256 max: true
+uint128 from 2^128 + 7 = 7
+int128 from int256{-5} = -5
+
+=== Mixed Arithmetic ===
+uint128 max * uint256{uint128 max} = 115792089237316195423570985008687907852589419931798687112530834793049593217025
+int256{-10} / int128{3}   = -3
+int128{-10} % int256{3}   = -1
+uint256{0} < int128{-1}   = true
+int256{0} > int128{-1}    = true
+
+=== Compound Assignment and Shifts ===
+int256{100} -= 142, *= 3  = -126
+uint128{10} += uint256{5} = 15
+uint128{15} /= 2^200      = 0
+uint128{1} << uint256{100} = 1267650600228229401496703205376
+int256{-256} >> int128{4}  = -16
+
+=== Numeric Utilities ===
+saturating_cast<uint128>(2^200)   = 340282366920938463463374607431768211455
+saturating_cast<int128>(int256 min) = -170141183460469231731687303715884105728
+ckd_add(uint128 max, 1) overflowed: true, wrapped sum = 0
+cmp_less(int128{-1}, uint256{0})  = true
+in_range<int128>(uint256{2^127})  = false
+----
+====
+
 [#examples_boost_math_random]
 == Boost Math and Random Integration
 

@@ -345,6 +345,26 @@ void test_signed_saturating_cast()
                   (uint256{UINT64_C(0x7FFFFFFFFFFFFFFF), UINT64_MAX, UINT64_MAX, UINT64_MAX}));
     BOOST_TEST(saturating_cast<int256>(uint256_max()) == max_v);
     BOOST_TEST(saturating_cast<int256>(uint256{42U}) == int256{42});
+
+    #if defined(BOOST_INT256_HAS_INT128) || defined(BOOST_INT256_HAS_MSVC_INT128)
+    // The builtin 128-bit targets clamp at both ends. A positive int256 above the
+    // unsigned 128-bit range used to come back truncated instead of saturated
+    using builtin_u128 = boost::int256::detail::builtin_u128;
+    using builtin_i128 = boost::int256::detail::builtin_i128;
+    const auto u128_max {static_cast<builtin_u128>(~static_cast<builtin_u128>(0))};
+    const auto i128_max {static_cast<builtin_i128>(u128_max >> static_cast<builtin_u128>(1))};
+    const auto i128_min {static_cast<builtin_i128>(-i128_max - static_cast<builtin_i128>(1))};
+
+    BOOST_TEST(saturating_cast<builtin_u128>(max_v) == u128_max);
+    BOOST_TEST(saturating_cast<builtin_u128>(int256{1} << 128U) == u128_max);
+    BOOST_TEST(saturating_cast<builtin_u128>((int256{1} << 128U) - 1) == u128_max);
+    BOOST_TEST(saturating_cast<builtin_u128>(int256{42}) == static_cast<builtin_u128>(42));
+    BOOST_TEST(saturating_cast<builtin_u128>(min_v) == static_cast<builtin_u128>(0));
+
+    BOOST_TEST(saturating_cast<builtin_i128>(max_v) == i128_max);
+    BOOST_TEST(saturating_cast<builtin_i128>(min_v) == i128_min);
+    BOOST_TEST(saturating_cast<builtin_i128>(int256{-42}) == static_cast<builtin_i128>(-42));
+    #endif
 }
 
 void test_signed_corpus_and_random()

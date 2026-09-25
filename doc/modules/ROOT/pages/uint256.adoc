@@ -123,6 +123,11 @@ struct uint256
 
     #endif
 
+    // Boost.Int128's uint128 and int128, when <boost/int128.hpp> was included first;
+    // behaves exactly as the builtin 128-bit constructors above
+    template <typename Int128Type>
+    BOOST_INT256_HOST_DEVICE constexpr uint256(const Int128Type v) noexcept;
+
     // Construct from floating-point types
     template <BOOST_INT256_FLOATING_POINT_CONCEPT Float>
     BOOST_INT256_HOST_DEVICE constexpr uint256(Float f) noexcept;
@@ -170,6 +175,10 @@ struct uint256
 
     #endif
 
+    // Boost.Int128's uint128 and int128, when <boost/int128.hpp> was included first
+    template <typename Int128Type>
+    BOOST_INT256_HOST_DEVICE constexpr operator Int128Type() const noexcept;
+
     // Conversion to floating point
     BOOST_INT256_HOST_DEVICE constexpr operator float() const noexcept;
     BOOST_INT256_HOST_DEVICE constexpr operator double() const noexcept;
@@ -184,6 +193,7 @@ All conversion operators except `operator bool()` are implicit to match the beha
 `operator bool()` is explicit so that a `uint256` cannot accidentally bind to a `bool` parameter; contextual conversions (`if (x)`, `!x`, and so on) still work.
 A conversion to a narrower integer keeps the low bits, which is what a `static_cast` between built-in integers does, so the upper words are simply dropped.
 Use xref:numeric.adoc#saturating_cast[`saturating_cast`] to clamp instead, or xref:utilities.adoc#in_range[`in_range`] to test first.
+The conversions to Boost.Int128's `uint128` and `int128` keep `words[0]` and `words[1]` the same way; see xref:mixed_type_ops.adoc#mixed_ops_int128[Operations With Boost.Int128 Types] for when those conversions exist and how to spell them portably.
 
 Conversions to floating-point types are lossy whenever the value needs more bits than the target significand holds, which for a 256-bit type is the common case.
 When the value does not fit the significand it is rounded once, to nearest with ties to even, and a value above the range of the target type becomes infinity: every `uint256` above `2^256^ - 2^232^` becomes infinity as a `float`, and the maximum converts to exactly `2^256^` as a `double`.

@@ -125,6 +125,7 @@ This is a deliberate correction relative to Boost.Int128, where `int128 /= uint1
 The rest of this page covers `uint256` against a built-in type. `int256` against a built-in type follows the same rules with `int256` in place of `uint256` throughout (see xref:int256.adoc#i256_operator_behavior[int256's own operator behavior] for the one difference: every builtin, including `pass:[unsigned __int128]`, fits inside `int256`, so there is no mixed sign trap the way there is between `int256` and `uint256` above). `int256` against `uint256` itself was covered above in xref:mixed_type_ops.adoc#mixed_ops_int256_uint256[int256 and uint256].
 
 All comparison, arithmetic, bitwise, and shift operators are provided between `uint256` and any built-in integer type, signed or unsigned, including the compiler's `pass:[__int128]` and `pass:[unsigned __int128]` where those exist (and `std::_Signed128` / `std::_Unsigned128` on MSVC in pass:[C++20] mode).
+The same operators are provided against Boost.Int128's `uint128` and `int128` when `<boost/int128.hpp>` is included first; see xref:mixed_type_ops.adoc#mixed_ops_int128[Operations With Boost.Int128 Types] below.
 
 The compound assignment operators are provided in both operand orders, so a built-in integer accepts a `uint256` right operand as well; see xref:mixed_type_ops.adoc#mixed_ops_integer_compound[Compound Assignment onto a Built-in Integer] below.
 
@@ -234,6 +235,106 @@ BOOST_INT256_HOST_DEVICE constexpr Integer& operator|=(Integer& lhs, const uint2
 ----
 
 A division or remainder by zero, and a shift count that is negative or at least the width of the promoted left operand, are undefined, exactly as for the built-in operators.
+
+[#mixed_ops_int128]
+== Operations With Boost.Int128 Types
+
+Every operation this library provides against the builtin `pass:[__int128]` and `pass:[unsigned __int128]` is also provided against https://github.com/boostorg/int128[Boost.Int128]'s `boost::int128::int128` and `boost::int128::uint128`, on every platform, including the ones with no builtin 128-bit type.
+Boost.Int256 never includes `<boost/int128.hpp>` itself, so this support drags nothing in and costs nothing unless it is asked for.
+It is enabled by including Boost.Int128 first:
+
+[source, c++]
+----
+#include <boost/int128.hpp>   // before any Boost.Int256 header
+#include <boost/int256.hpp>
+
+boost::int256::int256 x {boost::int128::int128{-42}};   // -42
+x *= boost::int128::uint128{3U};                         // -126
+
+boost::int128::uint128 low = x;                          // the low 128 bits of -126
+----
+
+If `<boost/int128.hpp>` is only included after a Boost.Int256 header, the two libraries stay unaware of each other, and mixing their types is a compile error rather than a silent conversion.
+
+=== Behavior
+
+`uint128` and `int128` behave exactly like the builtin 128-bit types they model:
+
+* Construction of `uint256` or `int256` from `uint128` or `int128` is implicit and exact. An `int128` sign fills the upper words, so `pass:[uint256{int128{-1}}]` is the maximum `uint256`.
+* The conversions from `uint256` or `int256` to `uint128` or `int128` are implicit and keep the low 128 bits.
+* A binary operator converts the 128-bit operand to the 256-bit type first, so the result has the type of the 256-bit operand and the usual arithmetic conversions apply: `pass:[uint256{0} < int128{-1}]` is `true` because the `-1` becomes the maximum `uint256`, while `pass:[int256{0} > int128{-1}]` is `true` because every 128-bit value fits in `int256`.
+* A shift takes its value and its result type from the left operand, and only the count from the right, so `pass:[uint128{1} << uint256{100}]` is a `uint128`.
+* Every compound assignment works in both operand orders. With the Boost.Int128 type on the left, the operation happens at 256 bits and only the result is narrowed, so dividing a `uint128` by `pass:[uint256{1} << 200]` gives zero rather than dividing by a truncated divisor.
+* xref:numeric.adoc#saturating_cast[`saturating_cast`], xref:utilities.adoc#checked[`ckd_add`, `ckd_sub`, `ckd_mul`], the xref:utilities.adoc#comparison[`cmp_*` family], and xref:utilities.adoc#in_range[`in_range`] accept `uint128` and `int128` as operands, and as the target type.
+
+[cols="3,3", options="header"]
+|===
+| Operands | Result of arithmetic / bitwise
+
+| `uint256` and `uint128` or `int128`
+| `uint256`
+
+| `int256` and `uint128` or `int128`
+| `int256`
+|===
+
+=== Available Operators
+
+In the synopsis below `Int128Type` is `boost::int128::uint128` or `boost::int128::int128`, and `Wide` stands for each of `uint256` and `int256`.
+
+[source, c++]
+----
+namespace boost {
+namespace int256 {
+
+// Comparisons, both operand orders
+template <typename Int128Type>
+BOOST_INT256_HOST_DEVICE constexpr bool operator==(const Wide& lhs, const Int128Type rhs) noexcept;
+
+template <typename Int128Type>
+BOOST_INT256_HOST_DEVICE constexpr bool operator==(const Int128Type lhs, const Wide& rhs) noexcept;
+
+// and likewise for !=, <, <=, >, >=, and <=> (which returns std::strong_ordering)
+
+// Arithmetic and bitwise operators, both operand orders
+template <typename Int128Type>
+BOOST_INT256_HOST_DEVICE constexpr Wide operator+(const Wide& lhs, const Int128Type rhs) noexcept;
+
+template <typename Int128Type>
+BOOST_INT256_HOST_DEVICE constexpr Wide operator+(const Int128Type lhs, const Wide& rhs) noexcept;
+
+// and likewise for -, *, /, %, &, |, ^
+
+// Shifts: the result type follows the left operand
+template <typename Int128Type>
+BOOST_INT256_HOST_DEVICE constexpr Wide operator<<(const Wide& lhs, const Int128Type rhs) noexcept;
+
+template <typename Int128Type>
+BOOST_INT256_HOST_DEVICE constexpr Int128Type operator<<(const Int128Type lhs, const Wide& rhs) noexcept;
+
+// and likewise for >>
+
+// Compound assignment, both operand orders
+template <typename Int128Type>
+BOOST_INT256_HOST_DEVICE constexpr Wide& operator+=(Wide& lhs, const Int128Type rhs) noexcept;
+
+template <typename Int128Type>
+BOOST_INT256_HOST_DEVICE constexpr Int128Type& operator+=(Int128Type& lhs, const Wide& rhs) noexcept;
+
+// and likewise for -=, *=, /=, %=, &=, |=, ^=, <<=, >>=
+
+} // namespace int256
+} // namespace boost
+----
+
+A division or remainder by zero, and a shift count that is negative or at least the width of the left operand, are undefined, exactly as for the builtin 128-bit types.
+
+=== Limitations
+
+* The include order is the switch, and it is decided once per translation unit by the first Boost.Int256 header included.
+* To convert a 256-bit value to a Boost.Int128 type, use copy initialization (`boost::int128::uint128 v = x;`), assignment, or pass it where a `uint128` or `int128` is expected; these work with every compiler and language standard. A `static_cast` or other direct initialization works with GCC and Clang from pass:[C++17] onward, but is ambiguous under pass:[C++14] with every compiler, and with MSVC in pass:[C++20] mode. The cause is on the Boost.Int128 side: its own constructors (from the builtin 128-bit types, and `uint128` from `int128`) are also reachable through the other implicit conversions of `uint256` and `int256`, and direct initialization only prefers the conversion that yields the target type exactly from pass:[C++17] onward, which MSVC does not apply once its builtin 128-bit types are in play.
+* Boost.Int128 has its own unconstrained `ckd_add`, `ckd_sub`, and `ckd_mul`, so an unqualified call with operands from both libraries is ambiguous through argument dependent lookup. Qualify the call: `boost::int256::ckd_add(&result, x, v)`.
+* The pass:[C++20] module (`import boost.int256;`) does not provide this interoperability, because a module interface cannot see which headers the importing translation unit included.
 
 [#mixed_ops_floating_point]
 == Operations With Floating-Point Types

@@ -44,7 +44,7 @@ if(HAVE_BOOST_TEST)
 
     else()
 
-        boost_test_jamfile(FILE Jamfile LINK_LIBRARIES Boost::int256 Boost::core Boost::random Boost::multiprecision Boost::mp11 Boost::charconv Boost::container_hash Boost::unordered)
+        boost_test_jamfile(FILE Jamfile LINK_LIBRARIES Boost::int256 Boost::int128 Boost::core Boost::random Boost::multiprecision Boost::mp11 Boost::charconv Boost::container_hash Boost::unordered)
 
         # check_cmake_version.cpp is deliberately not built. It asserts that the CMake
         # project version equals the Boost release version, which only holds for a

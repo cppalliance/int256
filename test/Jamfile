@@ -82,6 +82,7 @@ run test_mixed_type_sign_compare.cpp ;
 run test_mixed_type_sign_conversion.cpp ;
 run test_cross_type_assign.cpp ;
 run test_builtin_parity.cpp ;
+run test_int128_interop.cpp ;
 run test_spaceship_operator.cpp ;
 run test_sign_compare.cpp ;
 
@@ -136,6 +137,7 @@ run test_div.cpp : : : <define>BOOST_INT256_NO_BUILTIN_INT128 : test_div_no_buil
 run test_byte_conversions.cpp : : : <define>BOOST_INT256_NO_BUILTIN_INT128 : test_byte_conversions_no_builtin ;
 run test_i256_vs_multiprecision.cpp : : : <define>BOOST_INT256_NO_BUILTIN_INT128 : test_i256_vs_multiprecision_no_builtin ;
 run test_i256.cpp : : : <define>BOOST_INT256_NO_BUILTIN_INT128 : test_i256_no_builtin ;
+run test_int128_interop.cpp : : : <define>BOOST_INT256_NO_BUILTIN_INT128 <define>BOOST_INT128_NO_BUILTIN_INT128 : test_int128_interop_no_builtin ;
 
 # Compilation of individual headers
 compile compile_tests/int256_master_header_compile.cpp ;
@@ -156,6 +158,7 @@ compile compile_tests/random_compile.cpp ;
 compile compile_tests/string_compile.cpp ;
 compile compile_tests/utilities_compile.cpp ;
 compile compile_tests/builtin128_operators_compile.cpp ;
+compile compile_tests/int128_interop_order_compile.cpp ;
 
 compile compile_tests/int256_master_header_compile.cpp : <define>BOOST_INT256_NO_BUILTIN_INT128 : int256_master_header_no_builtin_compile ;
 compile compile_tests/int256_master_header_compile.cpp : <cxxstd>14 : int256_master_header_cxx14_compile ;
@@ -189,6 +192,7 @@ run ../example/checked_arithmetic.cpp ;
 run ../example/integer_comparison.cpp ;
 run ../example/mixed_type_arithmetic.cpp ;
 run ../example/mixed_float_arithmetic.cpp ;
+run ../example/int128_interop.cpp ;
 run ../example/math_and_random.cpp ;
 run ../example/charconv.cpp ;
 # Boost.Unordered propagates padding warnings out of <utility> on msvc. The
