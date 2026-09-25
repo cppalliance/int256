@@ -46,6 +46,26 @@ BOOST_INT256_EXPORT BOOST_INT256_HOST_DEVICE constexpr uint256 operator ""_U256(
     return detail::parse_literal<uint256>(str, str + len);
 }
 
+BOOST_INT256_EXPORT BOOST_INT256_HOST_DEVICE constexpr int256 operator ""_i256(const char* str) noexcept
+{
+    return detail::parse_literal<int256>(str, str + detail::strlen(str));
+}
+
+BOOST_INT256_EXPORT BOOST_INT256_HOST_DEVICE constexpr int256 operator ""_I256(const char* str) noexcept
+{
+    return detail::parse_literal<int256>(str, str + detail::strlen(str));
+}
+
+BOOST_INT256_EXPORT BOOST_INT256_HOST_DEVICE constexpr int256 operator ""_i256(const char* str, std::size_t len) noexcept
+{
+    return detail::parse_literal<int256>(str, str + len);
+}
+
+BOOST_INT256_EXPORT BOOST_INT256_HOST_DEVICE constexpr int256 operator ""_I256(const char* str, std::size_t len) noexcept
+{
+    return detail::parse_literal<int256>(str, str + len);
+}
+
 } // namespace literals
 } // namespace int256
 } // namespace boost
