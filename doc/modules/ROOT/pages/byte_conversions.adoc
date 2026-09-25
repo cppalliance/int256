@@ -246,10 +246,17 @@ BOOST_INT256_HOST_DEVICE constexpr T from_ne_bytes(const ByteType* bytes) noexce
 } // namespace boost
 ----
 
+[#byte_conversions_signed]
+== Signed values
+
+Every overload above has an `int256` twin with the same shape: `to_be`, `from_be`, `to_le`, `from_le`, and the `to_*_bytes` / `from_*_bytes` array forms all accept `int256` as well as `uint256` (the `static_assert` messages in the header name both types).
+The two's complement bit pattern is exactly what gets byte-reversed, so a negative `int256` needs no special handling: converting `int256{-300}` to big-endian bytes and back recovers `-300` the same way converting a `uint256` does.
+Because `uint256` and `int256` share the same 32-byte layout, the same wire bytes can also be read back as either type; only the interpretation of bit 63 of the last word differs.
+
 [#byte_conversions_examples]
 == Examples
 
-.This https://github.com/cppalliance/int256/blob/develop/example/byte_conversions.cpp[example] demonstrates the byte order conversion functions
+.This https://github.com/cppalliance/int256/blob/develop/example/byte_conversions.cpp[example] demonstrates the byte order conversion functions, for both `uint256` and `int256`
 ====
 [source, c++]
 ----
@@ -266,6 +273,12 @@ to_ne_bytes: 20 1f 1e 1d 1c 1b 1a 19 18 17 16 15 14 13 12 11 10 0f 0e 0d 0c 0b 0
 === Reading a value back out of bytes ===
 from_be_bytes: 300
 from_le_bytes: 19903532184728499472755846345868977080796606098303847563239893857561361776640
+
+=== Signed values ===
+to_be_bytes(-300): ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff fe d4
+from_be_bytes:     -300
+As uint256 (max): 115792089237316195423570985008687907853269984665640564039457584007913129639935
+As int256 (-1):   -1
 
 === Whole value conversions ===
 object representation of to_be(value): 01 02 03 04 05 06 07 08 09 0a 0b 0c 0d 0e 0f 10 11 12 13 14 15 16 17 18 19 1a 1b 1c 1d 1e 1f 20

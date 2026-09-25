@@ -15,7 +15,7 @@ what the program printed.
 [#examples_construction]
 == Basic Construction
 
-.This https://github.com/cppalliance/int256/blob/develop/example/construction.cpp[example] demonstrates every way a `uint256` can be constructed: from a built-in integer, from the four 64-bit words, from a literal or the constant macro, from a stream, and from a floating-point value.
+.This https://github.com/cppalliance/int256/blob/develop/example/construction.cpp[example] demonstrates every way a `uint256` or `int256` can be constructed: from a built-in integer, from the four 64-bit words, from a literal or the constant macro, from a stream, and from a floating-point value.
 ====
 [source, c++]
 ----
@@ -34,26 +34,47 @@ From string literal (max): 11579208923731619542357098500868790785326998466564056
 From BOOST_INT256_UINT256_C(2^192): 6277101735386680763835789423207666416102355444464034512896
 From stringstream: 123456789012345678901234567890123456789012345678901234567890
 
+=== int256 Construction ===
+From builtin (-42): -42
+From words (INT64_MIN, 0, 0, 0): -57896044618658097711785492504343953926634992332820282019728792003956564819968
+  Equals numeric_limits min? true
+  signed_high(): -9223372036854775808
+From literal -12345_i256: -12345
+From literal 12345_I256: 12345
+From string literal: -99999999999999999999
+From BOOST_INT256_INT256_C(-99999999999999999999): -99999999999999999999
+From hex string literal (-0x8, 63 zeros): -57896044618658097711785492504343953926634992332820282019728792003956564819968
+  Equals numeric_limits min? true
+BOOST_INT256_INT256_MIN: -57896044618658097711785492504343953926634992332820282019728792003956564819968
+BOOST_INT256_INT256_MAX: 57896044618658097711785492504343953926634992332820282019728792003956564819967
+  MIN equals numeric_limits min? true
+
 === Default and Copy Construction ===
-Default constructed: 0
-Copy constructed: 6277101735386680763835789423207666416102355444464034512896
+Default constructed (uint256): 0
+Default constructed (int256): 0
+Copy constructed (uint256): 6277101735386680763835789423207666416102355444464034512896
+Copy constructed (int256): -99999999999999999999
 
 === Floating-Point Construction ===
 uint256 from 12345.9 (truncated): 12345
+int256 from -12345.9 (truncated toward zero): -12345
 uint256 from 2^200: 1606938044258990275541962092341162602522202993782792835301376
 
 === Floating-Point Edge Cases ===
 uint256 from NaN: 0
+int256 from NaN: 0
 uint256 from -1.0 (clamped to zero): 0
 uint256 from +infinity (saturates): 115792089237316195423570985008687907853269984665640564039457584007913129639935
 uint256 from 1e80 (saturates): 115792089237316195423570985008687907853269984665640564039457584007913129639935
+int256 from 1e80 (saturates to max): 57896044618658097711785492504343953926634992332820282019728792003956564819967
+int256 from -1e80 (saturates to min): -57896044618658097711785492504343953926634992332820282019728792003956564819968
 ----
 ====
 
 [#examples_arithmetic]
 == Basic Arithmetic
 
-.This https://github.com/cppalliance/int256/blob/develop/example/basic_arithmetic.cpp[example] demonstrates the arithmetic operators, starting with the exact product of two 128-bit values, which is the case a 256-bit type exists for.
+.This https://github.com/cppalliance/int256/blob/develop/example/basic_arithmetic.cpp[example] demonstrates the arithmetic operators for both `uint256` and `int256`, starting with the exact product of two 128-bit values, which is the case a 256-bit type exists for.
 ====
 [source, c++]
 ----
@@ -105,13 +126,54 @@ counter = 12
 -one = 115792089237316195423570985008687907853269984665640564039457584007913129639935
 ~one = 115792089237316195423570985008687907853269984665640564039457584007913129639934
 abs(x) = 1000000000000
+
+=== Signed 256-bit Arithmetic ===
+sx = 1000000000000
+sy = -999999999999
+
+Addition and Subtraction:
+sx + sy = 1
+sx - sy = 1999999999999
+
+Multiplication:
+sx * sy = -999999999999000000000000
+
+Division and Modulo:
+sx / 7 = 142857142857
+sx % 7 = 1
+sy / 7 = -142857142857
+sy % 7 = 0
+
+Comparisons:
+sx > sy:  true
+sx == sy: false
+sx != sy: true
+
+Negative values and absolute value:
+negative = -42
+abs(negative) = 42
+
+Compound assignment operators:
+sz = 100
+sz += 50: 150
+sz -= 125: 25
+sz *= 2:  50
+sz /= 5:  10
+sz %= 7:  3
+
+Increment and Decrement:
+signed_counter = -3
+++signed_counter = -2
+signed_counter++ = -2
+signed_counter = -1
+--signed_counter = -2
 ----
 ====
 
 [#examples_io]
 == IO Streaming
 
-.This https://github.com/cppalliance/int256/blob/develop/example/stream.cpp[example] demonstrates stream insertion and extraction, and the `<ios>` manipulators that control base, case, base prefix, width and fill.
+.This https://github.com/cppalliance/int256/blob/develop/example/stream.cpp[example] demonstrates stream insertion and extraction for both `uint256` and `int256`, the `<ios>` manipulators that control base, case, base prefix, width and fill, and `int256`'s sign-magnitude formatting (the sign always comes before the base prefix) and `showpos`.
 ====
 [source, c++]
 ----
@@ -147,13 +209,38 @@ Match: true
 === Width, Fill and Alignment ===
 [............................42]
 [42............................]
+
+=== Basic Streaming with int256 ===
+Negative value (dec):          -255
+Negative value (hex, showbase): -0xff
+Negative value (oct, showbase): -0377
+
+showpos with int256 (dec):  +255
+showpos with int256 (hex):  ff
+showpos has no effect on uint256: 42
+
+=== Large Negative Values (Beyond 128 bits) ===
+int256 min = -57896044618658097711785492504343953926634992332820282019728792003956564819968
+int256 min (hex, showbase) = -0x8000000000000000000000000000000000000000000000000000000000000000
+int256 min / -1 = -57896044618658097711785492504343953926634992332820282019728792003956564819968
+Equals min again: true
+
+=== Parsing a Negative Value, Including a Prefix ===
+Parsed decimal: -123456789012345678901234567890123456789012345678901234567890
+Parsed hex "-ff": -255
+
+=== Round-trip Conversion with int256 ===
+Original:      -57896044618658097706808068680902951904513746364596002697710521812135923490320
+As string:     "-57896044618658097706808068680902951904513746364596002697710521812135923490320"
+Round-tripped: -57896044618658097706808068680902951904513746364596002697710521812135923490320
+Match: true
 ----
 ====
 
 [#examples_rollover]
 == Rollover Behavior
 
-.This https://github.com/cppalliance/int256/blob/develop/example/rollover.cpp[example] demonstrates that `uint256` is a modulo type: every operation wraps modulo 2^256^ and nothing at the boundary is undefined.
+.This https://github.com/cppalliance/int256/blob/develop/example/rollover.cpp[example] demonstrates that both `uint256` and `int256` are modulo types: every operation wraps modulo 2^256^ and nothing at the boundary is undefined, including `int256`'s `MIN / -1`, `MIN * -1` and `-MIN`, the one signed overflow this library defines.
 ====
 [source, c++]
 ----
@@ -173,6 +260,19 @@ Min - 1U: 1157920892373161954235709850086879078532699846656405640394575840079131
 
 2^128: 340282366920938463463374607431768211456
 2^128 * 2^128 (wraps to zero): 0
+
+=== int256 behavior ===
+is_modulo: true
+
+Max of int256: 57896044618658097711785492504343953926634992332820282019728792003956564819967
+Max + 1: -57896044618658097711785492504343953926634992332820282019728792003956564819968
+
+Min of int256: -57896044618658097711785492504343953926634992332820282019728792003956564819968
+Min - 1: 57896044618658097711785492504343953926634992332820282019728792003956564819967
+
+MIN / -1: -57896044618658097711785492504343953926634992332820282019728792003956564819968
+MIN * -1: -57896044618658097711785492504343953926634992332820282019728792003956564819968
+-MIN:     -57896044618658097711785492504343953926634992332820282019728792003956564819968
 ----
 ====
 
@@ -201,7 +301,7 @@ byteswap round trip  = true
 [#examples_byte_conversions]
 == Byte Order Conversions
 
-.This https://github.com/cppalliance/int256/blob/develop/example/byte_conversions.cpp[example] demonstrates converting a value to and from a 32-byte buffer in big-endian, little-endian, and native order, and reading a SHA-256 digest as an integer.
+.This https://github.com/cppalliance/int256/blob/develop/example/byte_conversions.cpp[example] demonstrates converting a value to and from a 32-byte buffer in big-endian, little-endian, and native order, reading a SHA-256 digest as an integer, and the same conversions on `int256`, whose two's complement bit pattern needs no special handling.
 ====
 [source, c++]
 ----
@@ -218,6 +318,12 @@ to_ne_bytes: 20 1f 1e 1d 1c 1b 1a 19 18 17 16 15 14 13 12 11 10 0f 0e 0d 0c 0b 0
 === Reading a value back out of bytes ===
 from_be_bytes: 300
 from_le_bytes: 19903532184728499472755846345868977080796606098303847563239893857561361776640
+
+=== Signed values ===
+to_be_bytes(-300): ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff fe d4
+from_be_bytes:     -300
+As uint256 (max): 115792089237316195423570985008687907853269984665640564039457584007913129639935
+As int256 (-1):   -1
 
 === Whole value conversions ===
 object representation of to_be(value): 01 02 03 04 05 06 07 08 09 0a 0b 0c 0d 0e 0f 10 11 12 13 14 15 16 17 18 19 1a 1b 1c 1d 1e 1f 20
@@ -269,6 +375,18 @@ saturating_cast<std::uint64_t>(max) = 18446744073709551615 (saturates to UINT64_
 saturating_cast<std::int64_t>(max)  = 9223372036854775807 (saturates to INT64_MAX)
 saturating_cast<std::int32_t>(max)  = 2147483647 (saturates to INT32_MAX)
 saturating_cast<std::uint64_t>(42)  = 42 (fits, so it is exact)
+
+=== Saturating Arithmetic with int256 ===
+int256 max = 57896044618658097711785492504343953926634992332820282019728792003956564819967
+int256 min = -57896044618658097711785492504343953926634992332820282019728792003956564819968
+saturating_add(int_max, 1) = 57896044618658097711785492504343953926634992332820282019728792003956564819967 (saturates to int_max; the operator wraps to int_min)
+saturating_sub(int_min, 1) = -57896044618658097711785492504343953926634992332820282019728792003956564819968 (saturates to int_min)
+saturating_mul(int_max, 2) = 57896044618658097711785492504343953926634992332820282019728792003956564819967 (saturates to int_max)
+saturating_mul(-(int_max - 2), 5) = -57896044618658097711785492504343953926634992332820282019728792003956564819968 (saturates to int_min)
+saturating_div(int_min, -1) = 57896044618658097711785492504343953926634992332820282019728792003956564819967 (saturates to int_max)
+saturating_cast<int256>(uint256 max) = 57896044618658097711785492504343953926634992332820282019728792003956564819967 (saturates to int_max)
+saturating_cast<uint256>(int256 min) = 0 (clamps a negative source to 0)
+saturating_cast<std::int64_t>(int_max) = 9223372036854775807 (saturates to INT64_MAX)
 ----
 ====
 
@@ -310,6 +428,14 @@ midpoint(max, max - 10) = 115792089237316195423570985008687907853269984665640564
 
 --- Binary search over the whole range ---
 isqrt(2^200) by bisection = 1267650600228229401496703205376 (= 2^100)
+
+=== gcd, lcm and midpoint with int256 ===
+gcd(-48, 18) = 6 (always non-negative)
+gcd(MIN, 0) = -57896044618658097711785492504343953926634992332820282019728792003956564819968 (wraps to MIN)
+
+--- Signed midpoint ---
+midpoint(-100, 100) = 0
+midpoint(-100, -50) = -75
 ----
 ====
 
@@ -362,6 +488,28 @@ div_to_zero(length, 1000)    = 1157920892373161954235709850086879078532699846656
 2500 / 1000: ties_to_even = 2, ties_away_zero = 3
 3500 / 1000: ties_to_even = 4, ties_away_zero = 4
 4500 / 1000: ties_to_even = 4, ties_away_zero = 5
+
+=== Every rounding mode on -12 / 5, with int256 ===
+div_to_zero          = -2
+div_away_zero        = -3
+div_to_pos_inf       = -2
+div_to_neg_inf       = -3
+div_euclid           = -3
+div_ties_to_zero     = -2
+
+div_rem_to_neg_inf(-12, 5): quotient = -3, remainder = 3
+div_rem_to_zero(-12, 5):    quotient = -2, remainder = -2
+quotient * y + remainder = -12
+
+=== Euclidean remainder is never negative ===
+-9 % 7 = -2, rem_euclid(-9, 7) = 5
+-8 % 7 = -1, rem_euclid(-8, 7) = 6
+-7 % 7 = 0, rem_euclid(-7, 7) = 0
+-6 % 7 = -6, rem_euclid(-6, 7) = 1
+
+=== MIN / -1, the one signed overflow this library defines ===
+div_to_zero(MIN, -1)      = -57896044618658097711785492504343953926634992332820282019728792003956564819968
+div_rem_to_zero(MIN, -1)  = quotient -57896044618658097711785492504343953926634992332820282019728792003956564819968, remainder 0
 ----
 ====
 
@@ -396,13 +544,19 @@ ckd_add<uint64_t>(uint256{5}, 3): overflow=false, result=8
 ckd_add<uint64_t>(max, 0): overflow=true, wrapped=18446744073709551615
 ckd_mul<uint256>(UINT64_MAX, UINT64_MAX): overflow=false, result=340282366920938463426481119284349108225
 ckd_mul<uint8_t>(20, 20): overflow=true, wrapped=144
+
+=== Checked Arithmetic with int256 ===
+ckd_add(INT256_MAX, 2): overflow=true, wrapped=-57896044618658097711785492504343953926634992332820282019728792003956564819967
+ckd_mul(INT256_MAX, 2): overflow=true, wrapped=-2
+ckd_mul(INT256_MIN, -1): overflow=true, wrapped=-57896044618658097711785492504343953926634992332820282019728792003956564819968
+ckd_add<int64_t>(uint256{5}, int256{-3}): overflow=false, result=2
 ----
 ====
 
 [#examples_mixed_sign]
 == Mixed Signedness Arithmetic
 
-.This https://github.com/cppalliance/int256/blob/develop/example/mixed_type_arithmetic.cpp[example] demonstrates arithmetic between `uint256` and the built-in integer types under the usual arithmetic conversions, including compound assignment onto a built-in integer.
+.This https://github.com/cppalliance/int256/blob/develop/example/mixed_type_arithmetic.cpp[example] demonstrates arithmetic between `uint256` and the built-in integer types under the usual arithmetic conversions, including compound assignment onto a built-in integer, and the corresponding rules for `int256` against a builtin and against `uint256` itself.
 ====
 [source, c++]
 ----
@@ -441,13 +595,27 @@ uint64_t{1} <<= uint256{40} -> 1099511627776
 static_cast<std::uint64_t>(2^128 + 12345) = 12345
 static_cast<bool>(uint256{0}) = false
 static_cast<bool>(wide)       = true
+
+=== Mixed Type Arithmetic with int256 ===
+signed_value = -3
+signed_value + 1U = -2
+signed_value - 4U = -7
+signed_value * 2  = -6
+signed_value / 4U = 0
+
+=== int256 and uint256 Follow the Same Rule as uint256 and a Builtin ===
+int256{-1} < uint256{1}   = false (the -1 becomes uint256 max)
+int256{-1} + uint256{1}   = 0 (result type is uint256)
+
+=== Compound Assignment Between int256 and uint256 ===
+int256{-10} /= uint256{3} -> 38597363079105398474523661669562635951089994888546854679819194669304376546642 ((uint256)-10 / 3, converted back)
 ----
 ====
 
 [#examples_mixed_float]
 == Mixed Floating-Point Arithmetic
 
-.This https://github.com/cppalliance/int256/blob/develop/example/mixed_float_arithmetic.cpp[example] demonstrates arithmetic and comparison against `float` and `double`, which convert the 256-bit operand first, exactly as the built-in types do.
+.This https://github.com/cppalliance/int256/blob/develop/example/mixed_float_arithmetic.cpp[example] demonstrates arithmetic and comparison against `float` and `double`, which convert the 256-bit operand first, exactly as the built-in types do, for both `uint256` and `int256`.
 ====
 [source, c++]
 ----
@@ -484,13 +652,26 @@ max == 2^256 as a double: true
 2^200 + 1                  = 1606938044258990275541962092341162602522202993782792835301377
 2^200 + 1 == double(2^200) = true
 2^200 + 1 == 2^200 exactly = false
+
+=== Arithmetic with int256 ===
+signed_value       = -5
+signed_value * 1.5 = -7.5
+2.0 + signed_value = -3
+
+=== Comparisons with int256 ===
+signed_value < 0.0 = true
+
+=== Conversions to floating point with int256 ===
+double(MIN) = -5.7896044618658098e+76
+double(MAX) = 5.7896044618658098e+76
+double(-2^200) = -1.6069380442589903e+60
 ----
 ====
 
 [#examples_boost_math_random]
 == Boost Math and Random Integration
 
-.This https://github.com/cppalliance/int256/blob/develop/example/math_and_random.cpp[example] demonstrates generating `uint256` values with a Boost.Random distribution, both over the whole range and over a narrow range at the top of the type.
+.This https://github.com/cppalliance/int256/blob/develop/example/math_and_random.cpp[example] demonstrates generating `uint256` and `int256` values with a Boost.Random distribution, both over the whole range and over a narrow range.
 ====
 [source, c++]
 ----
@@ -517,13 +698,24 @@ Expected (UINT64_MAX/2): 9.22337e+18
 Within 2 percent:      true
 Smallest draw has a nonzero top word: true
 Largest draw is above 2^255:          true
+
+=== Random int256 values ===
+Three signed draws over the whole range:
+  -48914518685495016003079655644702534743518077971924748443186506941468370631137
+  21229253073386910577533090253496966441456620612659052547108350093323684705720
+  -34152942800605455448740345423058401275269594265700221127640867476067807835176
+
+Three draws from [-1000, 1000]:
+  -46
+  -976
+  548
 ----
 ====
 
 [#examples_boost_charconv]
 == Boost.Charconv Integration
 
-.This https://github.com/cppalliance/int256/blob/develop/example/charconv.cpp[example] demonstrates `to_chars` and `from_chars` in several bases, and the error codes for a buffer that is too small, a value that is out of range, and text that is not a number.
+.This https://github.com/cppalliance/int256/blob/develop/example/charconv.cpp[example] demonstrates `to_chars` and `from_chars` in several bases, the error codes for a buffer that is too small, a value that is out of range, and text that is not a number, and the corresponding `int256` round trip.
 ====
 [source, c++]
 ----
@@ -554,13 +746,22 @@ Parsed hex "DEADBEEFCAFEBABE123456780F1E2D3C4B5A69788796A5B4C3D2E1F0"
 max + 1 parses: false (ec == result_out_of_range: true)
 "not a number" parses: false (ec == invalid_argument: true)
 "0x10" in base 16: value 0, stopped at 'x'
+
+=== to_chars and from_chars with int256 ===
+int256 min (decimal): -57896044618658097711785492504343953926634992332820282019728792003956564819968
+int256 -255 (hex): -ff
+
+Parsed "-57896044618658097711785492504343953926634992332820282019728792003956564819968"
+  Result: -57896044618658097711785492504343953926634992332820282019728792003956564819968
+  Equals min? true
+"+1" parses: false (ec == invalid_argument: true)
 ----
 ====
 
 [#examples_boost_container_hash]
 == Boost.ContainerHash and Boost.Unordered Integration
 
-.This https://github.com/cppalliance/int256/blob/develop/example/container_hash.cpp[example] demonstrates using `uint256` as a key in the Boost.Unordered containers, and combining two of them into a composite key with `boost::hash_combine`.
+.This https://github.com/cppalliance/int256/blob/develop/example/container_hash.cpp[example] demonstrates using `uint256` or `int256` as a key in the Boost.Unordered containers, and combining two of them into a composite key with `boost::hash_combine`.
 ====
 [source, c++]
 ----
@@ -590,13 +791,22 @@ counts[max] = 3
 === Using a 256-bit hash as a key ===
 Lookup by digest: the empty string
 Digest as an integer: 102987336249554097029535212322581322789799900648198034993379397001115665086549
+
+=== boost::hash on int256 ===
+boost::hash matches std::hash (int256): true
+hash(v) != hash(-v): true
+
+=== boost::unordered_flat_map<int256, ...> ===
+Flat map size: 4
+counts[-1] = 1
+counts[min] = 4
 ----
 ====
 
 [#examples_to_string]
 == String Conversion (to_string)
 
-.This https://github.com/cppalliance/int256/blob/develop/example/to_string.cpp[example] demonstrates `to_string` and `to_wstring`, and that the result agrees with `std::to_string` wherever the value fits in 64 bits.
+.This https://github.com/cppalliance/int256/blob/develop/example/to_string.cpp[example] demonstrates `to_string` and `to_wstring` for both `uint256` and `int256`, and that the result agrees with `std::to_string` wherever the value fits in 64 bits.
 ====
 [source, c++]
 ----
@@ -629,13 +839,27 @@ to_string of it round trips: true
 === to_wstring ===
 to_wstring(1234567890) has 10 characters
 Same digits as to_string: true
+
+=== to_string with int256 ===
+to_string(-42):              -42
+std::to_string(int64_t -42): -42
+Match: true
+
+to_string(INT64_MAX):       9223372036854775807
+std::to_string(INT64_MAX): 9223372036854775807
+Match: true
+
+=== int256 values beyond the 64-bit range ===
+int256 min with string literal: -57896044618658097711785492504343953926634992332820282019728792003956564819968
+int256 min with INT256_C macro: -57896044618658097711785492504343953926634992332820282019728792003956564819968
+int256 max: 57896044618658097711785492504343953926634992332820282019728792003956564819967
 ----
 ====
 
 [#examples_fmt_format]
 == pass:[{fmt}] Integration
 
-.This https://github.com/cppalliance/int256/blob/develop/example/fmt_format.cpp[example] demonstrates the pass:[{fmt}] formatter: presentation types, the alternate form, sign options, and the fill, align and width specifiers.
+.This https://github.com/cppalliance/int256/blob/develop/example/fmt_format.cpp[example] demonstrates the pass:[{fmt}] formatter: presentation types, the alternate form, sign options, and the fill, align and width specifiers, ending with `int256`'s sign-magnitude formatting.
 ====
 [source, c++]
 ----
@@ -695,13 +919,33 @@ Zero-filled:   '0000000000000100000000000000000000000000000000000000000000000000
 === Combined Format Specifiers ===
 Hex with prefix, uppercase, padded: 0X000000000000DEADBEEFCAFEBABE123456780F1E2D3C4B5A69788796A5B4C3D2E1F0
 Decimal with plus, padded: +0000000000023450803645956985397271062114592904319886246494160595176910461526512
+
+=== int256 Formatting ===
+Signed value: -123456789012345678
+Plus sign:  +42 and -42
+Minus only: 42 and -42
+Space sign:  42 and -42
+
+=== Sign-Magnitude in Every Base ===
+Negative hex with prefix: -0xff
+Negative, zero-padded:    -00000042
+
+=== Alignment with Sign ===
+Right align +:  '       +42'
+Left align +:   '+42       '
+Center align +: '    +42    '
+Right align -:  '*******-42'
+
+=== Large Signed Values ===
+int256 min:       -57896044618658097711785492504343953926634992332820282019728792003956564819968
+int256 min (hex): -0x8000000000000000000000000000000000000000000000000000000000000000
 ----
 ====
 
 [#examples_std_format]
 == `<format>` Integration
 
-.This https://github.com/cppalliance/int256/blob/develop/example/format.cpp[example] demonstrates the same format specifiers through pass:[C++20] `std::format`, plus `formatted_size` and `format_to`.
+.This https://github.com/cppalliance/int256/blob/develop/example/format.cpp[example] demonstrates the same format specifiers through pass:[C++20] `std::format`, plus `formatted_size` and `format_to`, ending with `int256`'s sign-magnitude formatting.
 ====
 [source, c++]
 ----
@@ -766,13 +1010,33 @@ Decimal with plus, padded: +0000000000023450803645956985397271062114592904319886
 formatted_size: 66
 format_to:      0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff
 Lengths match:  true
+
+=== int256 Formatting ===
+Signed value: -123456789012345678
+Plus sign:  +42 and -42
+Minus only: 42 and -42
+Space sign:  42 and -42
+
+=== Sign-Magnitude in Every Base ===
+Negative hex with prefix: -0xff
+Negative, zero-padded:    -00000042
+
+=== Alignment with Sign ===
+Right align +:  '       +42'
+Left align +:   '+42       '
+Center align +: '    +42    '
+Right align -:  '*******-42'
+
+=== Large Signed Values ===
+int256 min:       -57896044618658097711785492504343953926634992332820282019728792003956564819968
+int256 min (hex): -0x8000000000000000000000000000000000000000000000000000000000000000
 ----
 ====
 
 [#examples_cstdlib]
 == `<cstdlib>` support (Combined div and mod)
 
-.This https://github.com/cppalliance/int256/blob/develop/example/cstdlib.cpp[example] demonstrates `div`, which returns the quotient and the remainder of a single division.
+.This https://github.com/cppalliance/int256/blob/develop/example/cstdlib.cpp[example] demonstrates `div`, which returns the quotient and the remainder of a single division, for `uint256` and for `int256` (including every sign combination and `MIN / -1`).
 ====
 [source, c++]
 ----
@@ -801,6 +1065,19 @@ max / 340282366920938463500268095579187314691
 3 / 10 = 0 remainder 3
 100 / 25 = 4 remainder 0
 x / x = 1 remainder 0
+
+=== div() with int256 (returns i256div_t) ===
+-100 / 7 = -14 remainder -2
+
+--- Sign Combinations ---
+ 17 /  5 = 3 remainder 2
+ 17 / -5 = -3 remainder 2
+-17 /  5 = -3 remainder -2
+-17 / -5 = 3 remainder -2
+
+--- MIN / -1, the one signed overflow this library defines ---
+MIN / -1 = -57896044618658097711785492504343953926634992332820282019728792003956564819968 remainder 0
+Quotient equals MIN: true
 ----
 ====
 

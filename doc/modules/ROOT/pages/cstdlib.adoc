@@ -31,6 +31,12 @@ struct u256div_t
     uint256 rem;
 };
 
+struct i256div_t
+{
+    int256 quot;
+    int256 rem;
+};
+
 } // namespace int256
 } // namespace boost
 ----
@@ -38,7 +44,7 @@ struct u256div_t
 [#div_source]
 == div
 
-Using the structure defined above, the `div` function computes both quotient and remainder simultaneously:
+Using the structures defined above, the `div` function computes both quotient and remainder simultaneously:
 
 [source, c++]
 ----
@@ -47,13 +53,16 @@ namespace int256 {
 
 BOOST_INT256_HOST_DEVICE constexpr u256div_t div(const uint256& x, const uint256& y) noexcept;
 
+BOOST_INT256_HOST_DEVICE constexpr i256div_t div(const int256& x, const int256& y) noexcept;
+
 } // namespace int256
 } // namespace boost
 ----
 
-For any non-zero divisor the `quot` and `rem` values are the same as if you performed the division and the modulo separately, so `quot * y + rem == x` always holds and `rem < y`.
+For any non-zero divisor the `quot` and `rem` values are the same as if you performed the division and the modulo separately, so `quot * y + rem == x` always holds; for `u256div_t`, `rem < y` as well.
+For the signed overload, `quot`'s sign is `sign(x) != sign(y)` and `rem` takes the sign of the dividend `x`, exactly matching `operator/` and `operator%`, and `BOOST_INT256_INT256_MIN / -1` is the same defined wrap (`quot == INT256_MIN`, `rem == 0`) that those operators define.
 
 Division by zero is undefined behavior, exactly as it is for `operator/` and `operator%` and for the built-in integer types.
 The library performs no zero-divisor check, and a zero divisor seen during constant evaluation is a hard compile-time error.
 
-See the xref:examples.adoc#examples_cstdlib[div example] for a program that uses it, including a divisor wide enough to take the general division path.
+See the xref:examples.adoc#examples_cstdlib[div example] for a program that uses it, including a divisor wide enough to take the general division path, and the signed sign combinations.

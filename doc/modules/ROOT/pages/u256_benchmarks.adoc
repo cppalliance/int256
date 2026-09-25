@@ -17,7 +17,9 @@ The `Comparisons` row is the total of all six relational operators (`==`, `!=`, 
 
 No platform has a hardware 256-bit integer, so there is no builtin reference to compare against.
 The baseline is `boost::multiprecision::uint256_t` (abbreviated as `boost::mp::uint256` in the tables), which is widely used and portable, and is also the oracle the library's differential tests use.
-Where `math::wide_integer::uintwide_t<256>` is present on the build machine it is measured as a second comparison.
+The second comparison is https://github.com/ckormanyos/wide-integer[wide-integer]'s `math::wide_integer::uintwide_t<256U, std::uint32_t>` (`uintwide_t<256>` in the tables), an independent header-only implementation that is also the reference for the library's fuzzers.
+It is used in its default configuration, with 32-bit limbs.
+The driver measures it whenever `<math/wide_integer/uintwide_t.h>` is on the include path, and the CI runs always provide it, pinned to one commit so that runs stay comparable.
 There is no 256-bit type in Abseil, so unlike the Boost.Int128 benchmarks there is no Abseil column.
 
 NOTE: Each platform reports a single run, several of them from shared CI runners, so treat small differences as noise.
@@ -32,6 +34,8 @@ The driver is `test/benchmark_u256.cpp`. From a Boost tree with its headers stag
 g++ -std=c++20 -O2 -DNDEBUG -I . libs/int256/test/benchmark_u256.cpp -o benchmark_u256
 ./benchmark_u256 --json u256.json
 ----
+
+Add `-I <path to wide-integer>` to the command line to include the wide-integer column.
 
 Timings are printed to stderr as they are measured, so a run is readable without the data set.
 `--elements` and `--repetitions` shrink the run, which is what the emulated platforms use.

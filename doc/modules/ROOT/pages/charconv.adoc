@@ -48,6 +48,8 @@ struct to_chars_result
 
 BOOST_CHARCONV_CONSTEXPR to_chars_result to_chars(char* first, char* last, int256::uint256 value, int base = 10) noexcept;
 
+BOOST_CHARCONV_CONSTEXPR to_chars_result to_chars(char* first, char* last, int256::int256 value, int base = 10) noexcept;
+
 } // namespace charconv
 } // namespace boost
 ----
@@ -57,7 +59,8 @@ or pass:[C++20] with `std::is_constant_evaluated()`.
 Otherwise, it is defined as `inline`.
 
 A buffer that is too short is reported as `std::errc::value_too_large` with `ptr` set to `last`, and nothing is written.
-Size the buffer for the base in use: the maximum needs 78 characters in base 10, 64 in base 16, and 256 in base 2.
+Size the buffer for the base in use: the maximum needs 78 characters in base 10, 64 in base 16, and 256 in base 2 for `uint256`, and one more character for `int256` to hold a `-` sign.
+For `int256` the sign, when there is one, is written before the digits (and before a base prefix from `std::format`'s `#`, if that is also requested; see xref:format.adoc[Formatting Support]), never after: a negative value in base 16 is `-ff`, not `f...f` two's-complement digits.
 
 NOTE: These functions are in the namespace `boost::charconv`, and not `boost::int256`.
 
@@ -85,8 +88,12 @@ struct from_chars_result
 
 constexpr from_chars_result from_chars(const char* first, const char* last, int256::uint256& value, int base = 10) noexcept;
 
+constexpr from_chars_result from_chars(const char* first, const char* last, int256::int256& value, int base = 10) noexcept;
+
 // Allows both std::string and std::string_view (when available)
 constexpr from_chars_result from_chars(core::string_view sv, int256::uint256& value, int base = 10) noexcept;
+
+constexpr from_chars_result from_chars(core::string_view sv, int256::int256& value, int base = 10) noexcept;
 
 } // namespace charconv
 } // namespace boost
@@ -95,6 +102,7 @@ constexpr from_chars_result from_chars(core::string_view sv, int256::uint256& va
 Bases 2 through 36 are accepted.
 Parsing stops at the first character that is not a digit of the base, and `ptr` reports where it stopped, so `"0x10"` in base 16 yields `0` with `ptr` at the `x`.
 Text with no leading digit is `std::errc::invalid_argument`, and a value above the maximum is `std::errc::result_out_of_range` with `value` left untouched.
+For `int256`, a leading `-` is accepted before the digits (a leading `+` is not, matching `std::from_chars`); an unsigned `value` never accepts a sign at all, so `"-1"` into a `uint256` is `std::errc::invalid_argument` rather than the two's-complement value.
 
 The `core::string_view` overload is host only; the pointer overloads run on the device as well when `BOOST_INT256_ENABLE_CUDA` or `BOOST_INT256_ENABLE_SYCL` is defined, since Boost.Charconv provides matching device support.
 

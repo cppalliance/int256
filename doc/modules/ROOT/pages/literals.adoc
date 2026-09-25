@@ -26,16 +26,29 @@ BOOST_INT256_HOST_DEVICE constexpr uint256 operator ""_u256(const char* str, std
 
 BOOST_INT256_HOST_DEVICE constexpr uint256 operator ""_U256(const char* str, std::size_t len) noexcept;
 
+BOOST_INT256_HOST_DEVICE constexpr int256 operator ""_i256(const char* str) noexcept;
+
+BOOST_INT256_HOST_DEVICE constexpr int256 operator ""_I256(const char* str) noexcept;
+
+BOOST_INT256_HOST_DEVICE constexpr int256 operator ""_i256(const char* str, std::size_t len) noexcept;
+
+BOOST_INT256_HOST_DEVICE constexpr int256 operator ""_I256(const char* str, std::size_t len) noexcept;
+
 } // namespace literals
 } // namespace int256
 } // namespace boost
 
 #define BOOST_INT256_UINT256_C(x) ...
+#define BOOST_INT256_INT256_C(x) ...
 
 ----
 
-The macro at the end allows you to write out a 256-bit number the way you would with `UINT64_C`, without having to add quotes.
-It is defined in `<boost/int256/detail/literal_macros.hpp>`, which `literals.hpp` includes, and needs no `using namespace`.
+The macros at the end allow you to write out a 256-bit number the way you would with `UINT64_C`, without having to add quotes.
+They are defined in `<boost/int256/detail/literal_macros.hpp>`, which `literals.hpp` includes, and need no `using namespace`.
+
+The signed operators are `noexcept`.
+A malformed or out-of-range literal used in a constant expression is a compile-time error.
+One that is only evaluated at run time, for example by calling the string form with a run-time string, has no value to return and terminates the program.
 
 == Bases
 
@@ -51,6 +64,32 @@ Digit separators (`'`) may be used in any base.
 0777_u256           // octal,       == 511
 255_u256            // decimal,     == 255
 "115792089237316195423570985008687907853269984665640564039457584007913129639935"_u256  // the max
+-0xFF_i256          // == -255 (the unary minus is applied after parsing)
+"-0b1010"_i256      // == -10 (the string form may embed the sign)
+----
+
+A *raw* (unquoted) `_i256` literal never sees a leading `-`: `-X_i256` is the unary minus operator applied to the result of `X_i256`, exactly as `-9223372036854775808LL` is unary minus applied to `9223372036854775808LL`.
+So `X` itself, with no sign, has to fit in `int256`'s positive range in whichever base it is written, the same rule a built-in literal and Boost.Int128's `_i128` follow.
+This means the *positive* magnitude of the minimum value, `2^255^`, is one more than `INT256_MAX`, so all of the following are ill-formed and none of them may wrap to a valid value:
+
+[source, c++]
+----
+57896044618658097711785492504343953926634992332820282019728792003956564819968_i256   // 2^255, ill-formed: > MAX
+0x8000000000000000000000000000000000000000000000000000000000000000_i256              // 2^255, ill-formed: > MAX
+0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF_i256   // 2^256 - 1, ill-formed: > MAX
+----
+
+A *quoted* string literal is different: the sign is part of the digit sequence the operator receives, so it is parsed together with the magnitude by `parse_literal`, which range-checks the *signed* value directly (allowing a magnitude up to `2^255^` when the sign is negative, and up to `2^255^ - 1` when it is not).
+The macro forms stringify their whole argument, sign included, so they get the same treatment.
+These are the only ways to reach the minimum value directly:
+
+[source, c++]
+----
+BOOST_INT256_INT256_MIN
+BOOST_INT256_INT256_C(-57896044618658097711785492504343953926634992332820282019728792003956564819968)
+BOOST_INT256_INT256_C(-0x8000000000000000000000000000000000000000000000000000000000000000)
+"-0x8000000000000000000000000000000000000000000000000000000000000000"_i256
+"-57896044618658097711785492504343953926634992332820282019728792003956564819968"_i256
 ----
 
 == Error Handling
@@ -61,7 +100,9 @@ When such a literal is used in a constant expression the parse reaches `BOOST_IN
 
 The maximum is accepted and one past it is rejected, so `pass:[...639935_u256]` compiles and `pass:[...639936_u256]` does not.
 
-See the xref:examples.adoc#examples_construction[construction examples] for usage demonstrations of both the literals and the macro.
+NOTE: The minimum `int256` value cannot be written as a negated raw `_i256` literal for the reason given above: its positive magnitude (`2^255^`) exceeds `INT256_MAX`, so the literal is rejected before the unary minus ever applies. Use `BOOST_INT256_INT256_MIN`, one of the string or macro forms shown above, or `(std::numeric_limits<int256>::min)()` instead.
+
+See the xref:examples.adoc#examples_construction[construction examples] for usage demonstrations of both the literals and the macros.
 
 == Design Rationale
 

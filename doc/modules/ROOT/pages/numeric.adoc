@@ -12,7 +12,7 @@ https://www.boost.org/LICENSE_1_0.txt
 == Saturating Arithmetic
 
 Saturating arithmetic avoids the possibility of overflow or underflow by clamping the value to a defined range should either of these situations occur.
-This means that on overflow the function returns `std::numeric_limits<uint256>::max()`, and on underflow it returns `0`.
+This means that on overflow the function returns the type's maximum, and on underflow it returns the type's minimum (`0` for `uint256`).
 The following functions are provided for saturating arithmetic, and they *do not* require pass:[C++26].
 
 [source, c++]
@@ -24,28 +24,38 @@ namespace int256 {
 
 BOOST_INT256_HOST_DEVICE constexpr uint256 saturating_add(const uint256& x, const uint256& y) noexcept;
 
+BOOST_INT256_HOST_DEVICE constexpr int256 saturating_add(const int256& x, const int256& y) noexcept;
+
 BOOST_INT256_HOST_DEVICE constexpr uint256 saturating_sub(const uint256& x, const uint256& y) noexcept;
+
+BOOST_INT256_HOST_DEVICE constexpr int256 saturating_sub(const int256& x, const int256& y) noexcept;
 
 BOOST_INT256_HOST_DEVICE constexpr uint256 saturating_mul(const uint256& x, const uint256& y) noexcept;
 
+BOOST_INT256_HOST_DEVICE constexpr int256 saturating_mul(const int256& x, const int256& y) noexcept;
+
 BOOST_INT256_HOST_DEVICE constexpr uint256 saturating_div(const uint256& x, const uint256& y) noexcept;
+
+BOOST_INT256_HOST_DEVICE constexpr int256 saturating_div(const int256& x, const int256& y) noexcept;
 
 } // namespace int256
 } // namespace boost
 ----
 
-Multiplication is where a 256-bit type overflows most easily: the product of any two values at or above 2^128^ does not fit, and `saturating_mul` returns the maximum for those instead of the wrapped value.
+Multiplication is where a 256-bit type overflows most easily: the product of any two values at or above 2^128^ does not fit, and `saturating_mul` returns the maximum (or, for a negative signed product, the minimum) for those instead of the wrapped value.
 
-An unsigned quotient is never larger than the dividend, so `saturating_div` cannot overflow and returns the same result as the plain `operator/`.
-It exists for interface parity, and for the planned signed type where `min / -1` does overflow.
+An unsigned quotient is never larger than the dividend, so the `uint256` overload of `saturating_div` cannot overflow and returns the same result as the plain `operator/`.
+For the signed overload the only value that can overflow is `BOOST_INT256_INT256_MIN / -1`, which saturates to `BOOST_INT256_INT256_MAX`; every other non-zero divisor gives the same result as the plain `operator/`.
 Division by zero is a precondition violation and therefore undefined behavior (the divisor must be non-zero), exactly as for the plain division operator; `saturating_div` adds no zero-divisor check.
+
+See the xref:examples.adoc#examples_numeric[saturating arithmetic example] for a program that exercises every function above, ending with the `int256` overloads and `BOOST_INT256_INT256_MIN / -1`.
 
 [#saturating_cast]
 == Saturating Cast
 
-This function converts a `uint256` to a `TargetType`, saturating rather than wrapping when the value is out of the target's range.
-`TargetType` is constrained (via SFINAE) to the library's set of reduced integer types: the standard signed and unsigned integer types (excluding `bool` and plain `char`), `uint256` itself, and the compiler's native 128-bit integer types where available.
-Should the `TargetType` not be able to represent the value it is set to `std::numeric_limits<TargetType>::max()`.
+This function converts a `uint256` or `int256` to a `TargetType`, saturating rather than wrapping when the value is out of the target's range.
+`TargetType` is constrained (via SFINAE) to the library's set of reduced integer types: the standard signed and unsigned integer types (excluding `bool` and plain `char`), `uint256`, `int256`, and the compiler's native 128-bit integer types where available.
+Should the `TargetType` not be able to represent the value it is set to either `std::numeric_limits<TargetType>::max()` or `std::numeric_limits<TargetType>::min()` depending on whether the situation is overflow or underflow.
 
 [source, c++]
 ----
@@ -57,16 +67,20 @@ namespace int256 {
 template <typename TargetType>
 BOOST_INT256_HOST_DEVICE constexpr TargetType saturating_cast(const uint256& value) noexcept;
 
+template <typename TargetType>
+BOOST_INT256_HOST_DEVICE constexpr TargetType saturating_cast(const int256& value) noexcept;
+
 } // namespace int256
 } // namespace boost
 ----
 
 This is the safe counterpart of the implicit conversion operators, which keep the low bits instead. See also xref:utilities.adoc#in_range[`in_range`], which reports whether the value would fit without converting it.
+`pass:[saturating_cast<int256>(uint256_max)]` saturates to `BOOST_INT256_INT256_MAX`, and `pass:[saturating_cast<uint256>(int256_min)]` saturates to `0`, since a negative source has no representable unsigned value below it.
 
 [#gcd]
 == Greatest Common Divisor (GCD)
 
-Computes the greatest common divisor of `a` and `b`.
+Computes the greatest common divisor of the magnitudes of `a` and `b`.
 
 [source, c++]
 ----
@@ -77,19 +91,26 @@ namespace int256 {
 
 BOOST_INT256_HOST_DEVICE constexpr uint256 gcd(uint256 a, uint256 b) noexcept;
 
+BOOST_INT256_HOST_DEVICE constexpr int256 gcd(const int256& a, const int256& b) noexcept;
+
 } // namespace int256
 } // namespace boost
 ----
 
-Returns `0` when both `a` and `b` are `0`; otherwise returns the greatest common divisor.
-In particular, `gcd(a, 0)` returns `a` and `gcd(0, b)` returns `b`.
-This matches the results of https://eel.is/c++draft/numeric.ops#gcd[`std::gcd`] for every operand representable in the type.
-The function is `noexcept` and usable in a constant expression.
+Returns `0` when both `a` and `b` are `0`; otherwise returns the greatest common divisor of `abs(a)` and `abs(b)`, which is non-negative.
+In particular, `gcd(a, 0)` returns `abs(a)` and `gcd(0, b)` returns `abs(b)`.
+This matches the results of https://eel.is/c++draft/numeric.ops#gcd[`std::gcd`] for every operand whose magnitude is representable in the result type.
+Both overloads are `noexcept` and usable in a constant expression.
+
+NOTE: `std::gcd` leaves the behavior undefined when `abs(a)` or `abs(b)` is not representable in the result type; this library defines that case instead.
+The only such operand is `BOOST_INT256_INT256_MIN`, whose magnitude `2^255` is one greater than `BOOST_INT256_INT256_MAX`.
+The magnitude is still computed correctly, because the two's-complement bit pattern of `BOOST_INT256_INT256_MIN` reinterpreted as unsigned is exactly `2^255`, so the divisor returned is always arithmetically correct (for example, `gcd(BOOST_INT256_INT256_MIN, 6) == 2`).
+The single exception is when the divisor is itself `2^255`, which occurs only for `gcd(BOOST_INT256_INT256_MIN, 0)` and `gcd(BOOST_INT256_INT256_MIN, BOOST_INT256_INT256_MIN)`: because `2^255` is not representable as a positive `int256`, it is returned as the negative value `BOOST_INT256_INT256_MIN`.
 
 [#lcm]
 == Least Common Multiple (LCM)
 
-Computes the least common multiple of `a` and `b`.
+Computes the least common multiple of the magnitudes of `a` and `b`.
 
 [source, c++]
 ----
@@ -100,14 +121,19 @@ namespace int256 {
 
 BOOST_INT256_HOST_DEVICE constexpr uint256 lcm(const uint256& a, const uint256& b) noexcept;
 
+BOOST_INT256_HOST_DEVICE constexpr int256 lcm(const int256& a, const int256& b) noexcept;
+
 } // namespace int256
 } // namespace boost
 ----
 
-Returns `0` when either `a` or `b` is `0`; otherwise returns the least common multiple.
-This matches the results of https://eel.is/c++draft/numeric.ops#lcm[`std::lcm`] for every operand whose least common multiple is representable in the type.
+Returns `0` when either `a` or `b` is `0`; otherwise returns the least common multiple of `abs(a)` and `abs(b)`.
+This matches the results of https://eel.is/c++draft/numeric.ops#lcm[`std::lcm`] for every operand whose magnitude, and whose least common multiple, is representable in the result type.
+Both overloads are `noexcept` and usable in a constant expression.
 
-NOTE: `std::lcm` leaves the behavior undefined when the least common multiple itself is not representable; this library defines that case instead of trapping or throwing. The result is the true least common multiple reduced modulo 2^256^, consistent with the wrap-around of the xref:uint256.adoc#u256_math_operators[arithmetic operators].
+NOTE: `std::lcm` leaves the behavior undefined when `abs(a)` or `abs(b)` is not representable in the result type, or when the least common multiple itself is not representable; this library defines those cases instead of trapping or throwing.
+The result is the true least common multiple of the two magnitudes reduced modulo `2^256^`, consistent with the two's-complement wrap-around of the xref:uint256.adoc#u256_math_operators[arithmetic operators].
+For the signed overload that reduced value is then interpreted as a two's-complement `int256` and may therefore be negative; a `BOOST_INT256_INT256_MIN` operand contributes the magnitude `2^255`, computed correctly as described for `gcd` above.
 
 [#midpoint]
 == Midpoint
@@ -123,12 +149,14 @@ namespace int256 {
 
 BOOST_INT256_HOST_DEVICE constexpr uint256 midpoint(const uint256& a, const uint256& b) noexcept;
 
+BOOST_INT256_HOST_DEVICE constexpr int256 midpoint(const int256& a, const int256& b) noexcept;
+
 } // namespace int256
 } // namespace boost
 ----
 
-The sum is never formed, so `midpoint` cannot overflow: `midpoint(max, max - 10)` is correct, while `(a + b) / 2` at that magnitude is not.
-That is what makes it usable as the step of a binary search over the whole range of the type; see the xref:examples.adoc#examples_numeric_algorithms[numeric algorithms example].
+The sum is never formed, so `midpoint` cannot overflow: `midpoint(max, max - 10)` is correct for both signs, while `(a + b) / 2` at that magnitude is not.
+That is what makes it usable as the step of a binary search over the whole range of the type; see the xref:examples.adoc#examples_numeric_algorithms[numeric algorithms example], which also covers the signed overload, including a midpoint spanning zero (`pass:[midpoint(int256{-100}, int256{100}) == 0]`).
 
 [#int_div]
 == Integer Division
@@ -186,75 +214,81 @@ namespace int256 {
 
 BOOST_INT256_HOST_DEVICE constexpr uint256 div_<mode>(const uint256& x, const uint256& y) noexcept;
 
+BOOST_INT256_HOST_DEVICE constexpr int256 div_<mode>(const int256& x, const int256& y) noexcept;
+
 BOOST_INT256_HOST_DEVICE constexpr div_result<uint256> div_rem_<mode>(const uint256& x, const uint256& y) noexcept;
 
+BOOST_INT256_HOST_DEVICE constexpr div_result<int256> div_rem_<mode>(const int256& x, const int256& y) noexcept;
+
 BOOST_INT256_HOST_DEVICE constexpr uint256 rem_euclid(const uint256& x, const uint256& y) noexcept;
+
+BOOST_INT256_HOST_DEVICE constexpr int256 rem_euclid(const int256& x, const int256& y) noexcept;
 
 } // namespace int256
 } // namespace boost
 ----
 
 `<mode>` is one of the eleven names below.
-The last two columns give the quotient for a dividend that does not divide evenly, and for one that lands exactly halfway between two integers.
+The last two columns give the quotient for a dividend that does not divide evenly, and for one that lands exactly halfway between two integers, using a negative dividend so that every mode's behavior is distinguishable (the unsigned overloads see the same magnitudes with a positive dividend; see xref:numeric.adoc#div_semantics[Semantics] below for how they collapse).
 
 [cols="1,2,1,1", options="header"]
 |===
-| `<mode>` | Rounds | `12 / 5` (exactly `2.4`) | `7 / 2` (exactly `3.5`)
+| `<mode>` | Rounds | `-12 / 5` (exactly `-2.4`) | `-7 / 2` (exactly `-3.5`)
 
 | `to_zero`
 | Towards zero, which is what `operator/` does
-| `2`
-| `3`
+| `-2`
+| `-3`
 
 | `away_zero`
 | Away from zero
-| `3`
-| `4`
+| `-3`
+| `-4`
 
 | `to_pos_inf`
 | Towards positive infinity (ceiling)
-| `3`
-| `4`
+| `-2`
+| `-3`
 
 | `to_neg_inf`
 | Towards negative infinity (floor)
-| `2`
-| `3`
+| `-3`
+| `-4`
 
 | `euclid`
 | So that the remainder is non-negative
-| `2`
-| `3`
+| `-3`
+| `-4`
 
 | `ties_to_zero`
 | To nearest, an exact tie towards zero
-| `2`
-| `3`
+| `-2`
+| `-3`
 
 | `ties_away_zero`
 | To nearest, an exact tie away from zero
-| `2`
-| `4`
+| `-2`
+| `-4`
 
 | `ties_to_pos_inf`
 | To nearest, an exact tie towards positive infinity
-| `2`
-| `4`
+| `-2`
+| `-3`
 
 | `ties_to_neg_inf`
 | To nearest, an exact tie towards negative infinity
-| `2`
-| `3`
+| `-2`
+| `-4`
 
 | `ties_to_odd`
 | To nearest, an exact tie to the odd quotient
-| `2`
-| `3`
+| `-2`
+| `-3`
 
 | `ties_to_even`
 | To nearest, an exact tie to the even quotient
-| `2`
-| `4`
+| `-2`
+| `-4`
 |===
 
 An exact tie is only possible when the divisor is even, so the six `ties_` modes differ from each other only there; everywhere else they all return the nearest integer.
@@ -262,23 +296,26 @@ An exact tie is only possible when the divisor is even, so the six `ties_` modes
 [#div_semantics]
 === Semantics
 
-The remainder returned by `div_rem_<mode>` is the one that matches the quotient, so `x == quotient * y + remainder` holds modulo 2^256^.
-A quotient rounded up leaves a negative remainder, which has to wrap: `pass:[div_rem_to_pos_inf(uint256{12}, uint256{5})]` therefore returns a quotient of `3` and a remainder of `2^256^ - 3`, since `12 - 3 * 5` is `-3`.
-The quotient itself never overflows: rounding only moves the quotient when the division is inexact, and an inexact division has a divisor of at least two.
+The remainder returned by `div_rem_<mode>` is the one that matches the quotient: `x == quotient * y + remainder` for the signed overloads.
+For the unsigned overloads the same identity holds modulo `2^256^`, because a quotient rounded up leaves a negative remainder that has to wrap: `pass:[div_rem_to_pos_inf(uint256{12}, uint256{5})]` therefore returns a quotient of `3` and a remainder of `2^256^ - 3`, since `12 - 3 * 5` is `-3`.
+The quotient itself never overflows: rounding only moves the quotient when the division is inexact, and an inexact division has a divisor whose magnitude is at least two.
 
-Because a `uint256` quotient is never negative, several of the modes collapse together.
+The unsigned overloads exist for every mode, but a non-negative quotient collapses several of them together.
 `div_to_zero`, `div_to_neg_inf`, and `div_euclid` are all plain truncation, `div_away_zero` and `div_to_pos_inf` are the same rounding up, `div_ties_to_neg_inf` matches `div_ties_to_zero`, and `div_ties_to_pos_inf` matches `div_ties_away_zero`.
-The full set is still provided so that generic code can name a rounding mode without also having to know the signedness of the operands, and so that the names keep their meaning when the signed `int256` arrives.
+The full set is still provided so that generic code can name a rounding mode without also having to know the signedness of the operands.
 
-`rem_euclid` returns a value in `[0, y)`, which for an unsigned dividend is exactly what `operator%` returns.
-It is provided for the same reason: so that code written against the P3724 interface compiles for either signedness.
+`rem_euclid` returns a value in `[0, abs(y))`, which makes it the function to reach for when wrapping a possibly negative offset into a range; `operator%` instead takes its sign from the dividend.
+The signed overload is correct for `y == BOOST_INT256_INT256_MIN` even though `abs(y)` is not representable as a positive `int256`, because the correction is applied in unsigned arithmetic.
+`div_euclid` agrees with `div_to_neg_inf` when the divisor is positive, and with `div_to_pos_inf` when it is negative.
+For an unsigned dividend, `rem_euclid` is exactly what `operator%` already returns.
 
 Each `div_rem_<mode>` performs exactly one division, so it is the cheaper way to obtain both halves; computing `x / y` and `x % y` separately costs two divisions, since neither the compiler nor the library can share the work across the two operators.
 xref:cstdlib.adoc[`div`] is the same idea for the truncating mode.
 
 A zero divisor is a precondition violation and therefore undefined behavior, exactly as for `operator/` and xref:numeric.adoc#sat_arith[`saturating_div`]; no zero-divisor check is performed.
+The signed overloads are likewise undefined for `BOOST_INT256_INT256_MIN / -1`, whose quotient is not representable (use xref:numeric.adoc#sat_arith[`saturating_div`] when that input is possible).
 
 NOTE: The paper leaves these functions non-`noexcept` because a precondition violation is undefined behavior.
 This library marks them `noexcept` for consistency with the rest of its interface, which does the same.
 
-See the xref:examples.adoc#examples_integer_division[integer division example] for a program that prints every mode.
+See the xref:examples.adoc#examples_integer_division[integer division example] for a program that prints every mode, ending with the signed overloads on `-12 / 5` and the one signed overflow, `BOOST_INT256_INT256_MIN / -1`.

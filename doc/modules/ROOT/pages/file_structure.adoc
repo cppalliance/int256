@@ -90,5 +90,5 @@ The remaining top-level directories of the repository are:
 | The vcpkg port
 
 | `test/`
-| The test suite, including the CUDA and SYCL suites, the compile-fail tests, the fuzzing harnesses, and the benchmarks
+| The test suite, including the CUDA and SYCL suites, the compile-fail tests, the fuzzing harnesses and differential test against wide-integer, and the benchmarks
 |===

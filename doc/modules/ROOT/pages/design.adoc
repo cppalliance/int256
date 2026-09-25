@@ -27,6 +27,18 @@ The alignment is the natural alignment of the member array, that is `alignof(std
 pass:[C++14] has no aligned `operator new`, so an over-aligned element type would make `std::vector<uint256>` ill-behaved, and MSVC warns about over-aligned aggregates passed by value.
 The SIMD paths therefore load through `std::memcpy` into a vector local rather than casting a pointer to the object.
 
+== The Signed Type Reuses the Same Layout
+
+`int256` is not a second implementation: it is the same `std::uint64_t words[4]`, interpreted as two's complement instead of pure magnitude, with the sign living in bit 63 of `words[3]`.
+Reusing the layout means a `uint256` and an `int256` holding the same bit pattern convert between each other with a plain bit copy, in either direction, and it means every design decision above (the fixed word order, the lack of over-alignment, the intrinsics-with-a-portable-fallback structure) applies to `int256` unchanged.
+`+`, `-`, `*`, `pass:[<<]`, `++`, `--`, and unary `-` are all computed on the bit image in the unsigned domain and then reinterpreted as signed, so none of them can trigger signed-overflow undefined behavior the way the equivalent expression on a built-in signed integer can; the type's `is_modulo` is `true` for exactly this reason.
+
+Division and remainder are the one place sign has to be handled explicitly, and they are handled by reducing to the unsigned case rather than by a parallel signed implementation: `abs(lhs)` and `abs(rhs)` are computed first (as `uint256` magnitudes), the existing unsigned division runs on those magnitudes, and only the final quotient's sign is flipped when the operands' signs differ, with the remainder taking the sign of the dividend.
+`abs` of `BOOST_INT256_INT256_MIN` has the bit pattern `2^255^` exactly, which is representable as a `uint256` magnitude, so this reduction has no missing case; it is the same reduction the built-in `pass:[__int128]` division that Boost.Int128 wraps uses internally, but done here as library code operating on the four words directly.
+That is also what makes `BOOST_INT256_INT256_MIN / -1` well-defined rather than undefined: the naive alternative, negating the dividend and dividing two positive magnitudes, would itself overflow when the dividend is `BOOST_INT256_INT256_MIN` (its magnitude is not representable as a positive `int256`), which is a mistake this design avoids by never forming that negation. The overflow is instead absorbed once, at the end, by the same two's-complement wrap already used for the other signed arithmetic operators: the quotient wraps back to `BOOST_INT256_INT256_MIN`, and the remainder is `0`.
+
+See xref:int256.adoc[int256] for the complete operator reference and xref:mixed_type_ops.adoc[Mixed Type Operations] for how `int256` and `uint256` interoperate.
+
 == No Dependencies
 
 Nothing under `include/boost/int256/` includes a header from another Boost library, or from any other third-party library, outside of two `pass:[__has_include]` guarded integrations (Boost.Charconv in `charconv.hpp` and pass:[{fmt}] in `fmt_format.hpp`).

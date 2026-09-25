@@ -1,0 +1,66 @@
+////
+Copyright 2026 Matt Borland
+Distributed under the Boost Software License, Version 1.0.
+https://www.boost.org/LICENSE_1_0.txt
+////
+
+[#i256_benchmarks]
+= `int256` Benchmarks
+:idprefix: i256_benchmarks_
+
+== Methodology
+
+Every cell below is the total time in microseconds that one operation takes over a whole vector of random values, so lower is better.
+The vector holds operands of random width (64, 128, 192, or 256 bits, that is one to four significant words) with mixed signs, each operation is evaluated as `op(vec[i], vec[i + 1])` across the vector, and the whole vector is walked several times.
+Each platform states its element count and pass count, and therefore how many operations a cell covers.
+The `Comparisons` row is the total of all six relational operators (`==`, `!=`, `<`, `<=`, `>`, `>=`) over that same vector, which is why it costs roughly six arithmetic rows.
+
+Unlike Boost.Int128's signed benchmark, which only exercises non-negative operands, this benchmark draws operands of both signs, so the division, remainder, and right-shift rows measure the arithmetic (sign-aware) paths rather than only the unsigned-equivalent ones.
+
+No platform has a hardware 256-bit integer, so there is no builtin reference to compare against.
+The baseline is `boost::multiprecision::int256_t` (abbreviated as `boost::mp::int256` in the tables). Note that `mp::int256_t` is sign-magnitude with range `+-(2^256 - 1)`, not two's complement, so it is a portability and API baseline rather than a bit-identical oracle; see xref:comp_to_multiprecision.adoc[Comparison to Boost.Multiprecision].
+The second comparison is https://github.com/ckormanyos/wide-integer[wide-integer]'s `math::wide_integer::uintwide_t<256U, std::uint32_t, void, true>` (`intwide_t<256>` in the tables), an independent header-only implementation that is also the reference for the library's fuzzers.
+It is used in its default configuration, with 32-bit limbs.
+The driver measures it whenever `<math/wide_integer/uintwide_t.h>` is on the include path, and the CI runs always provide it, pinned to one commit so that runs stay comparable.
+There is no 256-bit type in Abseil, so there is no Abseil column.
+
+NOTE: Each platform reports a single run, several of them from shared CI runners, so treat small differences as noise.
+
+[#i256_benchmarks_running]
+== Running the Benchmarks
+
+The driver is `test/benchmark_i256.cpp`. From a Boost tree with its headers staged (`b2 headers`), build it in release mode and pass `--json` to have it write out a data set:
+
+[source, shell]
+----
+g++ -std=c++20 -O2 -DNDEBUG -I . libs/int256/test/benchmark_i256.cpp -o benchmark_i256
+./benchmark_i256 --json i256.json
+----
+
+Add `-I <path to wide-integer>` to the command line to include the wide-integer column.
+
+Timings are printed to stderr as they are measured, so a run is readable without the data set.
+`--elements` and `--repetitions` shrink the run, which is what the emulated platforms use.
+
+From the root of a Boost tree, `.github/scripts/run_benchmarks.sh --compiler g++ --out <dir>` builds and runs both the `u256` and `i256` drivers exactly as CI does and leaves a complete data set folder behind. It takes its include path from the checked out libraries, so it needs no staged headers.
+
+The `benchmarks.yml` workflow runs the driver on every platform documented here and uploads one `benchmarks-<os>-<arch>` artifact per platform.
+It runs on every pull request, and each job's summary compares its fresh numbers against the published ones, so a regression is visible without downloading anything.
+To refresh this page, unpack those artifacts into `doc/modules/ROOT/data` and run `doc/render_benchmarks.py`, which rewrites every table and plot below from the data sets.
+
+// BENCHMARK-RESULTS-GENERATED
+
+[#i256_linux]
+== Linux
+
+Numbers are published here once the `benchmarks.yml` workflow has run and its artifacts have been rendered by `doc/render_benchmarks.py`.
+
+[#i256_windows]
+== Windows
+
+Numbers are published here once the `benchmarks.yml` workflow has run and its artifacts have been rendered by `doc/render_benchmarks.py`.
+
+[#i256_mac]
+== macOS
+
+Numbers are published here once the `benchmarks.yml` workflow has run and its artifacts have been rendered by `doc/render_benchmarks.py`.

@@ -46,10 +46,12 @@ There are three allowable signs first in the format string:
 [options="header"]
 |===
 | Sign      | Effect
-| `+`       | Adds a `+` to the value
-| `-`       | Adds nothing, since a `uint256` is never negative
-| pass:[` `] (Space)       | Adds a ` ` to the value. Preserves alignment
+| `+`       | Adds a `+` to a non-negative value (`uint256` is never negative; `int256` already shows its own `-`)
+| `-`       | Adds nothing beyond what the value already shows: nothing for a non-negative value, and the `-` for a negative `int256`
+| pass:[` `] (Space)       | Adds a ` ` in place of where `+` would go, for a non-negative value. Preserves alignment
 |===
+
+A negative `int256` always shows its `-` regardless of which of these three is requested; they only control what happens for a non-negative value.
 
 == Prepend Prefix
 
@@ -63,6 +65,8 @@ If you want to prepend the prefix to your number (if applicable) add `#`
 | Decimal       | None
 | Hex           | `0x` or `0X`
 |===
+
+For a negative `int256`, the sign is written before the prefix, not after it: `{:#x}` on `int256{-255}` is `-0xff`, not `0x-ff`.
 
 == Padding
 

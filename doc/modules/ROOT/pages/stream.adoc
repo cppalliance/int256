@@ -26,11 +26,26 @@ std::basic_ostream<charT, traits>& operator<<(std::basic_ostream<charT, traits>&
 template <typename charT, typename traits>
 std::basic_istream<charT, traits>& operator>>(std::basic_istream<charT, traits>& is, uint256& v);
 
+template <typename charT, typename traits>
+std::basic_ostream<charT, traits>& operator<<(std::basic_ostream<charT, traits>& os, const int256& v);
+
+template <typename charT, typename traits>
+std::basic_istream<charT, traits>& operator>>(std::basic_istream<charT, traits>& is, int256& v);
+
 } // namespace int256
 } // namespace boost
 ----
 
 These are host-only functions: they are not annotated with `BOOST_INT256_HOST_DEVICE` and are not available in device code.
+
+[#stream_sign]
+== Sign, Base Prefix and `showpos`
+
+`int256` is sign-magnitude in every base: on output, the sign (if any) is written first, before any base prefix from `showbase`, so `-0xff` and `-0377`, never `0x-ff`.
+`std::showpos` prints a leading `+` for a non-negative `int256` in decimal only; it has no effect in `hex` or `oct` mode, and it has no effect on `uint256` at all, matching the built-in unsigned types.
+
+On extraction, `operator>>` accepts an optional leading `-` before the digits (and before a `0x` or `0` prefix, when the active base allows one) but rejects a leading `+`, matching `from_chars`.
+A value outside `int256`'s range, including one whose magnitude overflows during the parse, sets `failbit`.
 
 == Flags
 
@@ -46,9 +61,9 @@ The base flags (`std::oct`, `std::dec`, `std::hex`) affect both input and output
 - `std::showbase` - Adds a leading base prefix for hex or oct numbers on output (e.g. 0xffff)
 - `std::noshowbase` - Omits the leading base prefix on output (e.g. ffff)
 
-The width and fill manipulators (`std::setw`, `std::setfill`, `std::left`, `std::right`, `std::internal`) apply to the number as a whole, and the internal buffer is sized for the longest possible output, which is 256 characters in base 2.
+The width and fill manipulators (`std::setw`, `std::setfill`) work with `std::left`, `std::right`, and `std::internal` exactly as they do for the built-in integer types: `std::left` and `std::right` pad before or after the whole output (sign and base prefix included), while `std::internal` places the fill between the sign/prefix and the digits. `pass:[std::setw(12) << std::internal << std::hex << std::showbase << int256{-255}]` prints `"-0x       ff"`, not `"-0xff       "` (`std::left`) or `"       -0xff"` (`std::right`). The internal buffer is sized for the longest possible output, which is 256 characters in base 2.
 
 On extraction (`operator>>`) a leading `0x` or `0` base prefix is accepted and consumed for the active base regardless of `showbase`, and hexadecimal input is parsed case-insensitively.
 A value that does not fit in a `uint256` sets `failbit`.
 
-See the xref:examples.adoc#examples_io[IO streaming example] for usage demonstrations.
+See the xref:examples.adoc#examples_io[IO streaming example] for usage demonstrations, including the sign, prefix, and `showpos` rules above.

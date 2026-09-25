@@ -14,6 +14,10 @@ There are several reasons why:
 `boost::multiprecision::uint256_t` is `number<cpp_int_backend<256, 256, unsigned_magnitude, unchecked, void>>`, which stores a limb count and a sign next to the limbs, so `sizeof` is larger than 32 bytes and the object representation is not simply the value.
 `uint256` is exactly 32 bytes, trivially copyable, and standard layout, so it can be `memcpy`-ed, written into a packet or a file format, stored in an array that a hardware instruction can load, or handed to a GPU kernel.
 
+- The signed comparison is sharper still.
+`boost::multiprecision::int256_t` is `number<cpp_int_backend<256, 256, signed_magnitude, checked, void>>`: a *sign-magnitude* representation with `checked` overflow, whose range is `+-(2^256 - 1)`, one more negative value's worth wider on the positive side and one narrower on the negative side than a 256-bit two's-complement type, and whose default arithmetic *throws* `std::overflow_error` rather than wrapping.
+`int256` is two's complement over the same four `std::uint64_t words[4]` `uint256` uses, with range `[-2^255^, 2^255^ - 1]`, and it wraps on overflow rather than throwing, matching a built-in signed integer's `is_modulo` behavior. `boost::mp::int256_t` is still the benchmark baseline (see xref:i256_benchmarks.adoc[int256 Benchmarks]) because no platform has a hardware 256-bit type to compare against instead, not because the two types model the same thing.
+
 - The goal is for this library to be extremely lightweight.
 It has no Boost dependencies at all, whereas https://pdimov.github.io/boostdep-report/develop/module-weights.html[Boost.Multiprecision has a module weight of 25].
 

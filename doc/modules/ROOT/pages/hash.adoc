@@ -8,7 +8,7 @@ https://www.boost.org/LICENSE_1_0.txt
 = Hashing
 :idprefix: hash_
 
-The `<boost/int256/hash.hpp>` header provides a specialization of `std::hash` for `uint256`, allowing the type to be used as a key in `std::unordered_map`, `std::unordered_set`, and any other container that relies on `std::hash`.
+The `<boost/int256/hash.hpp>` header provides specializations of `std::hash` for `uint256` and `int256`, allowing either type to be used as a key in `std::unordered_map`, `std::unordered_set`, and any other container that relies on `std::hash`.
 
 [source, c++]
 ----
@@ -28,12 +28,19 @@ struct hash<boost::int256::uint256>
     std::size_t operator()(const boost::int256::uint256& v) const noexcept;
 };
 
+template <>
+struct hash<boost::int256::int256>
+{
+    std::size_t operator()(const boost::int256::int256& v) const noexcept;
+};
+
 } // namespace std
 ----
 
 Each of the four 64-bit words is run through a SplitMix64 finalizer so that every input bit influences the lower bits of the result.
 This is necessary because `std::hash<std::uint64_t>` is permitted to truncate to `std::size_t`, which on a 32-bit platform is a plain cast: any value whose low word is zero would then hash to zero, and distinct 256-bit values would collide wholesale.
 The finalized words are then folded together with the `boost::hash_combine` mixing formula.
+`int256` uses exactly the same algorithm over the same four words as `uint256`, with no separate sign handling: the sign is just bit 63 of `words[3]`, and it takes part in the mixing the same way any other bit does.
 
 [#hash_guarantees]
 == Guarantees
@@ -41,11 +48,12 @@ The finalized words are then folded together with the `boost::hash_combine` mixi
 * Two values comparing equal under `operator==` produce the same hash.
 * The mixing is position dependent, so a permutation of the four words does not collide except by chance: `pass:[{a, b, c, d}]` and `pass:[{d, c, b, a}]` hash differently.
 * Every bit of every word participates, so values that differ only in the most significant word hash differently on a 32-bit platform as well as on a 64-bit one.
+* For any non-zero `int256 v`, `std::hash<int256>{}(v) != std::hash<int256>{}(-v)`: negating flips bits in every word once the two's-complement sign is applied, so the two hashes practically never collide.
 
 [#hash_container_hash]
 == Boost.ContainerHash
 
-The header also injects a `hash_value` overload into the `boost::int256` namespace, so the type integrates with https://www.boost.org/doc/libs/master/libs/container_hash/doc/html/hash.html[Boost.ContainerHash] through argument-dependent lookup.
+The header also injects `hash_value` overloads into the `boost::int256` namespace, so both types integrate with https://www.boost.org/doc/libs/master/libs/container_hash/doc/html/hash.html[Boost.ContainerHash] through argument-dependent lookup.
 
 [source, c++]
 ----
@@ -54,12 +62,14 @@ namespace int256 {
 
 std::size_t hash_value(const uint256& v) noexcept;
 
+std::size_t hash_value(const int256& v) noexcept;
+
 } // namespace int256
 } // namespace boost
 ----
 
-This function delegates to the `std::hash` specialization above, so every entry point produces the same result for a given value.
-With it, `boost::hash`, `boost::hash_combine`, and `boost::hash_range` accept `uint256`, and the type can be used as a key in `boost::unordered_map`, `boost::unordered_set`, and the flat and node container variants (which default to `boost::hash`) without an explicit hasher.
+These functions delegate to the `std::hash` specializations above, so every entry point produces the same result for a given value.
+With them, `boost::hash`, `boost::hash_combine`, and `boost::hash_range` accept `uint256` and `int256`, and either type can be used as a key in `boost::unordered_map`, `boost::unordered_set`, and the flat and node container variants (which default to `boost::hash`) without an explicit hasher.
 
 See the xref:examples.adoc#examples_boost_container_hash[Boost.ContainerHash integration example] for a complete program.
 

@@ -12,9 +12,9 @@ Matt Borland
 
 == Description
 
-Boost.Int256 is a fully portable implementation of unsigned 256-bit integers.
+Boost.Int256 is a fully portable implementation of 256-bit integers, both unsigned (`uint256`) and signed (`int256`).
 The library supports a robust range of related functionality such as `<bit>`, `<iostream>`, `<charconv>`, and `<format>`.
-On all platforms the type provided is exactly 256 bits wide.
+On all platforms both types are exactly 256 bits wide.
 
 For comparison, the maximum value of a 64-bit unsigned integer is 18,446,744,073,709,551,615, and the maximum value of a 128-bit unsigned integer is 340,282,366,920,938,463,463,374,607,431,768,211,455.
 The maximum value of a 256-bit unsigned integer is 78 decimal digits long:
@@ -31,8 +31,9 @@ When using pass:[C++20] or later, the library can optionally be imported as a mo
 
 Boost.Int256 is also available as a https://github.com/cppalliance/int256/blob/develop/extra/single_include/boost/int256.hpp[single header], which is regenerated from `include/` by CI on every change.
 
-This release provides the unsigned type `uint256`.
-A signed `int256` is planned and will follow the same layout, header set, and naming.
+This release provides both the unsigned type `uint256` and the signed type `int256`.
+`int256` shares `uint256`'s layout (the same `std::uint64_t words[4]`, interpreted as two's complement) and the same header set, so a value moves between the two types with a plain bit copy.
+See xref:uint256.adoc[uint256] and xref:int256.adoc[int256].
 
 == Motivation
 

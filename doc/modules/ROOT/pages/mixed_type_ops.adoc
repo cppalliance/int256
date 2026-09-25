@@ -14,7 +14,115 @@ The constructors from, and the conversion operators to, the built-in integer and
 The single exception is `operator bool`, which is explicit.
 See xref:uint256.adoc#u256_constructors[Constructors] and xref:uint256.adoc#u256_conversions[Conversions].
 
+`uint256` and `int256` also convert to each other implicitly, and that conversion is a plain bit copy in both directions: no bits change, only the interpretation of bit 63 of `words[3]` does. See xref:int256.adoc#i256_constructors[int256 Constructors].
+
+[#mixed_ops_int256_uint256]
+== int256 and uint256
+
+`int256` and `uint256` interoperate the way a built-in signed and unsigned integer of the same width do: through the usual arithmetic conversions, with the signed operand converted to the unsigned type.
+Concretely, both operands convert to `uint256` first, so a negative `int256` sign-extends into all four words exactly as a negative built-in integer does when compared or combined with an unsigned one of the same width.
+
+[cols="3,2,3", options="header"]
+|===
+| Operands | Common type | Result of arithmetic / bitwise
+
+| `int256` and `uint256`
+| `uint256`
+| `uint256`
+|===
+
+For example, `pass:[int256{-1} < uint256{1}]` is `false`, for the same reason `-1 < 1U` is at 32 bits: the `-1` becomes `BOOST_INT256_UINT256_MAX` before the comparison.
+Use the xref:utilities.adoc#comparison[`cmp_*` family] when the mathematical answer is wanted instead.
+
+For shift operators, the result type follows the left operand, exactly as it does for every other right operand type: `int256 pass:[<<] uint256` and `int256 pass:[>>] uint256` return `int256`; `uint256 pass:[<<] int256` and `uint256 pass:[>>] int256` return `uint256`.
+Only the right operand's integer *value* is used as the count; its type does not otherwise participate.
+
+[source, c++]
+----
+namespace boost {
+namespace int256 {
+
+//=====================================
+// Comparison Operators
+//=====================================
+
+constexpr bool operator==(const uint256& lhs, const int256& rhs);
+constexpr bool operator==(const int256& lhs, const uint256& rhs);
+constexpr bool operator!=(const uint256& lhs, const int256& rhs);
+constexpr bool operator!=(const int256& lhs, const uint256& rhs);
+constexpr bool operator<(const uint256& lhs, const int256& rhs);
+constexpr bool operator<(const int256& lhs, const uint256& rhs);
+constexpr bool operator<=(const uint256& lhs, const int256& rhs);
+constexpr bool operator<=(const int256& lhs, const uint256& rhs);
+constexpr bool operator>(const uint256& lhs, const int256& rhs);
+constexpr bool operator>(const int256& lhs, const uint256& rhs);
+constexpr bool operator>=(const uint256& lhs, const int256& rhs);
+constexpr bool operator>=(const int256& lhs, const uint256& rhs);
+
+//=====================================
+// Arithmetic Operators
+//=====================================
+
+constexpr uint256 operator+(const uint256& lhs, const int256& rhs);
+constexpr uint256 operator+(const int256& lhs, const uint256& rhs);
+constexpr uint256 operator-(const uint256& lhs, const int256& rhs);
+constexpr uint256 operator-(const int256& lhs, const uint256& rhs);
+constexpr uint256 operator*(const uint256& lhs, const int256& rhs);
+constexpr uint256 operator*(const int256& lhs, const uint256& rhs);
+constexpr uint256 operator/(const uint256& lhs, const int256& rhs);
+constexpr uint256 operator/(const int256& lhs, const uint256& rhs);
+constexpr uint256 operator%(const uint256& lhs, const int256& rhs);
+constexpr uint256 operator%(const int256& lhs, const uint256& rhs);
+
+//=====================================
+// Bitwise Operators
+//=====================================
+
+constexpr uint256 operator|(const uint256& lhs, const int256& rhs);
+constexpr uint256 operator|(const int256& lhs, const uint256& rhs);
+constexpr uint256 operator&(const uint256& lhs, const int256& rhs);
+constexpr uint256 operator&(const int256& lhs, const uint256& rhs);
+constexpr uint256 operator^(const uint256& lhs, const int256& rhs);
+constexpr uint256 operator^(const int256& lhs, const uint256& rhs);
+
+//=====================================
+// Shift Operators
+//=====================================
+// Result type follows the left operand.
+
+constexpr int256  operator<<(const int256&  lhs, const uint256& rhs);
+constexpr uint256 operator<<(const uint256& lhs, const int256&  rhs);
+constexpr int256  operator>>(const int256&  lhs, const uint256& rhs);
+constexpr uint256 operator>>(const uint256& lhs, const int256&  rhs);
+
+} // namespace int256
+} // namespace boost
+----
+
+The cross-type arithmetic and bitwise operators return the same value as `static_cast<uint256>(lhs) op static_cast<uint256>(rhs)`.
+The comparison operators return the same value as that expression compared with the matching unsigned operator.
+
+=== Compound Assignment Is the One Exception
+
+Every other compound assignment operator in this library is `*this = *this op rhs`, which is why xref:mixed_type_ops.adoc#mixed_ops_integer_compound[Compound Assignment onto a Built-in Integer] below can describe all of them at once.
+`int256& operator@=(int256&, const uint256&)` (for all ten of `pass:[|=]`, `pass:[&=]`, `pass:[^=]`, `pass:[<<=]`, `pass:[>>=]`, `+=`, `-=`, `*=`, `/=`, `%=`) is declared separately rather than falling out of that rule, because `*this = *this op rhs` would mean `int256 = uint256`, which converts back to `int256` *before* the division or shift happens; that changes the answer whenever `*this` is negative.
+
+Instead, each of these ten operators is defined to convert `*this` to `uint256` explicitly, perform the operation entirely in the `uint256` domain, and convert only the final result back to `int256`, exactly matching what `long long op= unsigned long long` does at 64 bits:
+
+[source, c++]
+----
+boost::int256::int256 x {-10};
+x /= boost::int256::uint256{3};   // (uint256)-10 / 3, then converted back to int256
+----
+
+This is a deliberate correction relative to Boost.Int128, where `int128 /= uint128` has no cross-type compound overload and therefore resolves to the member `int128::operator/=(int128)`, dividing signed where the built-in mixed-type operation (and this library's own `int256 /= uint256`) divides unsigned.
+`uint256 @= int256` needs no such special case: it already resolves through `uint256::operator@=(const uint256&)`, because `uint256 = int256` converting `*this` back is a no-op (the target is already unsigned).
+
+(`uint256 op= int256`'s compound assignment, and all of `int256`'s and `uint256`'s compound assignment onto a *built-in* integer, follow the ordinary `*this = *this op rhs` rule and are covered by xref:mixed_type_ops.adoc#mixed_ops_integer_compound[Compound Assignment onto a Built-in Integer] below.)
+
 == Operator Overloads Across Types
+
+The rest of this page covers `uint256` against a built-in type. `int256` against a built-in type follows the same rules with `int256` in place of `uint256` throughout (see xref:int256.adoc#i256_operator_behavior[int256's own operator behavior] for the one difference: every builtin, including `pass:[unsigned __int128]`, fits inside `int256`, so there is no mixed sign trap the way there is between `int256` and `uint256` above). `int256` against `uint256` itself was covered above in xref:mixed_type_ops.adoc#mixed_ops_int256_uint256[int256 and uint256].
 
 All comparison, arithmetic, bitwise, and shift operators are provided between `uint256` and any built-in integer type, signed or unsigned, including the compiler's `pass:[__int128]` and `pass:[unsigned __int128]` where those exist (and `std::_Signed128` / `std::_Unsigned128` on MSVC in pass:[C++20] mode).
 
@@ -130,7 +238,7 @@ A division or remainder by zero, and a shift count that is negative or at least 
 [#mixed_ops_floating_point]
 == Operations With Floating-Point Types
 
-`uint256` supports exactly the operators that the built-in integers support with a floating-point operand, in either operand order, for `float`, `double`, and `long double`.
+`uint256` supports exactly the operators that the built-in integers support with a floating-point operand, in either operand order, for `float`, `double`, `long double`, and, where the standard library provides it, a pass:[C++23] `<stdfloat>` extended type (`std::float16_t`, `float32_t`, `float64_t`, `float128_t`, `bfloat16_t`).
 
 The rule is the pass:[C++] usual arithmetic conversions: the 256-bit operand is converted to the floating-point type *first*, and the operation is then performed entirely in that floating-point type.
 The result type is the floating-point type, never `uint256`.
@@ -148,6 +256,10 @@ bool d = u < 5.5;      // true
 Because the conversion happens before the operation, and because it is rounded once, to nearest with ties to even, every result is what the corresponding built-in expression would produce.
 That holds on every platform and in either builtin configuration: the conversion is implemented in the library, so it does not depend on the compiler having a wide integer type.
 
+The `<stdfloat>` types are host only, and only available at all under pass:[C++23] or later on a toolchain that actually ships the specific type (GCC 13 and later with libstdc++; as of this writing, libc++ and MSVC's standard library do not yet provide it). Where a type is not available, it simply does not participate in overload resolution here, exactly like any other type the platform lacks: there is no error, just no operator. The conversion to and from these types is correctly rounded exactly as above, so mixing with `std::float16_t` (8-bit significand, no value above 65504) can overflow to infinity where `double` or `long double` would not.
+
+CAUTION: Under `-ffast-math`, `-ffinite-math-only`, or the Intel compiler's default `-fp-model=fast`, the compiler may assume no floating-point operand is ever NaN or infinity, so a conversion *from* one of those values (in either direction of these mixed-type operators) gives unspecified results. Use `-fp-model=precise` with `icpx` when NaN or infinity handling matters. This was found in CI, where `icpx`'s default model turned `uint256{+inf}` into `2^191`.
+
 === Available Operators
 
 [source, c++]
@@ -155,7 +267,8 @@ That holds on every platform and in either builtin configuration: the conversion
 namespace boost {
 namespace int256 {
 
-// Float is float, double, or long double.
+// Float is float, double, long double, or a <stdfloat> extended type the
+// standard library provides.
 
 //=====================================
 // Arithmetic Operators
@@ -241,6 +354,7 @@ For a comparison that is exact for every value, use the xref:utilities.adoc#comp
 
 === Limitations
 
-* `pass:[__float128]` is not supported, even on the platforms where the compiler provides it. Only `float`, `double`, and `long double` participate.
-* `long double` is unavailable on the CUDA and SYCL device, so the `long double` overloads are not declared when `BOOST_INT256_HAS_GPU_SUPPORT` is defined, matching the xref:uint256.adoc#u256_conversions[conversion operators].
+* `pass:[__float128]` is not supported, even on the platforms where the compiler provides it. Only `float`, `double`, `long double`, and the `<stdfloat>` extended types participate.
+* `long double` and the `<stdfloat>` extended types are unavailable on the CUDA and SYCL device, so their overloads are not declared when `BOOST_INT256_HAS_GPU_SUPPORT` is defined, matching the xref:uint256.adoc#u256_conversions[conversion operators].
+* A `<stdfloat>` extended type participates only when the current standard library actually ships it (checked per type, via its `__STDCPP_..._T__` macro, never via `__cpp_lib_stdfloat`, which some standard libraries omit even when the header and the type both exist). As of this writing that is GCC 13 and later with libstdc++; libc++ and MSVC's standard library do not yet provide these types.
 * On a platform whose `long double` is IBM double-double, currently ppc64le, `long double` results are reproducible but not bitwise reproducible: that format is not canonical and its arithmetic is not correctly rounded, so two expressions computing the same product can differ in the last bits. `float` and `double` are unaffected, and so is every other `long double` format.

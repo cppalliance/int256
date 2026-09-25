@@ -42,7 +42,7 @@ The type provides:
 * Compound assignment variants of all binary operators
 * Increment and decrement operators (`++`, `--`)
 
-A signed `int256` is planned for a following release and will use the same layout and word order.
+A signed xref:int256.adoc[`int256`] is also provided, using the same layout and word order; see its own page for the two's-complement details specific to a signed type.
 
 [#u256_layout]
 == Layout and Alignment
@@ -188,6 +188,10 @@ Use xref:numeric.adoc#saturating_cast[`saturating_cast`] to clamp instead, or xr
 Conversions to floating-point types are lossy whenever the value needs more bits than the target significand holds, which for a 256-bit type is the common case.
 When the value does not fit the significand it is rounded once, to nearest with ties to even, and a value above the range of the target type becomes infinity: every `uint256` above `2^256^ - 2^232^` becomes infinity as a `float`, and the maximum converts to exactly `2^256^` as a `double`.
 This holds whether or not the compiler provides a built-in 128-bit integer to use as an intermediate, so a value converts to the same bit pattern in either configuration.
+
+`uint256` also converts to a pass:[C++23] `<stdfloat>` extended type (`std::float16_t`, `float32_t`, `float64_t`, `float128_t`, `bfloat16_t`) when the standard library provides it: host only, and only under pass:[C++23] or later on a toolchain whose standard library actually ships `<stdfloat>` with that specific type (GCC 13 and later with libstdc++; as of this writing, libc++ and MSVC's standard library do not yet provide it, so those types are simply absent from `uint256` there, not merely disabled). The conversion is correctly rounded exactly as above, so the narrowest of these, `std::float16_t` (8-bit significand, no value above 65504), overflows to infinity for any `uint256` past that point.
+
+CAUTION: Under `-ffast-math`, `-ffinite-math-only`, or the Intel compiler's default `-fp-model=fast`, the compiler may assume no floating-point operand is ever NaN or infinity, so a conversion *from* one of those values gives unspecified results instead of the saturating behavior xref:numeric.adoc#saturating_cast[`saturating_cast`] and the constructor below describe. Use `-fp-model=precise` with `icpx` when NaN or infinity handling matters. This was found in CI, where `icpx`'s default model turned `uint256{+inf}` into `2^191`.
 
 [#u256_comparison_operators]
 == Comparison Operators
@@ -592,7 +596,7 @@ Unary `operator-` returns the two's-complement negation of `value` (equivalent t
 BOOST_INT256_HOST_DEVICE constexpr uint256 abs(const uint256& value) noexcept;
 ----
 
-Returns `value` unchanged. It exists so that generic code, and code written against the planned signed `int256`, can call `abs` on either type.
+Returns `value` unchanged. It exists so that generic code can call `abs` on either type; see xref:int256.adoc#i256_abs[`int256`'s `abs`] for the signed overload, which can actually change the value.
 
 === Addition
 

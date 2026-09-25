@@ -13,28 +13,30 @@ https://www.boost.org/LICENSE_1_0.txt
 #include <boost/int256/random.hpp>
 ----
 
-Including this header specializes the traits that https://www.boost.org/doc/libs/release/libs/random/[Boost.Random] uses to reason about integer types, so that `uint256` can be used directly with the Boost.Random engines and distributions such as `boost::random::uniform_int_distribution`.
+Including this header specializes the traits that https://www.boost.org/doc/libs/release/libs/random/[Boost.Random] uses to reason about integer types, so that `uint256` and `int256` can be used directly with the Boost.Random engines and distributions such as `boost::random::uniform_int_distribution`.
 This header requires Boost.Random to be available, and is therefore not included by the umbrella header.
 
-The following specializations are provided in namespace `boost::random::traits` for `uint256`:
+The following specializations are provided in namespace `boost::random::traits` for both `uint256` and `int256`:
 
 [cols="1,2", options="header"]
 |===
 | Trait | Purpose
 
 | `is_integral`
-| Reports the type as integral.
+| Reports both types as integral.
 
 | `is_signed`
-| Reports the type as unsigned.
+| Reports `uint256` as unsigned and `int256` as signed.
 
 | `make_unsigned`, `make_unsigned_imp`
-| Provide the unsigned type mapping Boost.Random uses when generating values.
+| Provide the unsigned type mapping Boost.Random uses when generating values (`uint256` for both `uint256` and `int256`).
 
 | `make_unsigned_or_unbounded`, `make_unsigned_or_unbounded_imp`
-| Provide the unsigned-or-unbounded type mapping Boost.Random uses.
+| Provide the unsigned-or-unbounded type mapping Boost.Random uses (likewise `uint256` for both).
 |===
 
 NOTE: These specializations live in `boost::random::traits`, not `boost::int256`. The header itself includes nothing from Boost: it forward declares the trait templates, so it costs nothing when Boost.Random is not in use.
+
+Because `is_signed<int256>` is `true`, `boost::random::uniform_int_distribution<int256>{lo, hi}` accepts a negative `lo` and draws over the full signed range, including a distribution spanning `(std::numeric_limits<int256>::min)()` to `(std::numeric_limits<int256>::max)()`.
 
 An example combining Boost.Random with the library type is available xref:examples.adoc#examples_boost_math_random[on the examples page].

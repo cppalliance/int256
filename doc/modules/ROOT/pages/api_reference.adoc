@@ -35,9 +35,10 @@ https://www.boost.org/LICENSE_1_0.txt
 
 | xref:uint256.adoc[`uint256`]
 | Unsigned 256-bit integer
-|===
 
-A signed `int256` is planned for a following release.
+| xref:int256.adoc[`int256`]
+| Signed 256-bit integer, two's complement
+|===
 
 [#api_literals]
 == Literals
@@ -51,6 +52,12 @@ A signed `int256` is planned for a following release.
 
 | xref:literals.adoc[`_U256`]
 | Unsigned 256-bit literal (uppercase)
+
+| xref:literals.adoc[`_i256`]
+| Signed 256-bit literal (lowercase)
+
+| xref:literals.adoc[`_I256`]
+| Signed 256-bit literal (uppercase)
 |===
 
 [#api_structs]
@@ -63,11 +70,20 @@ A signed `int256` is planned for a following release.
 | https://en.cppreference.com/w/cpp/types/numeric_limits[`std::numeric_limits<uint256>`]
 | Numeric limits specialization for `uint256`
 
+| https://en.cppreference.com/w/cpp/types/numeric_limits[`std::numeric_limits<int256>`]
+| Numeric limits specialization for `int256`
+
 | xref:hash.adoc[`std::hash<uint256>`]
 | Hash specialization for `uint256`
 
+| xref:hash.adoc[`std::hash<int256>`]
+| Hash specialization for `int256`
+
 | xref:cstdlib.adoc#div_structs[`u256div_t`]
 | Result type for `div(uint256, uint256)`
+
+| xref:cstdlib.adoc#div_structs[`i256div_t`]
+| Result type for `div(int256, int256)`
 
 | xref:numeric.adoc#div_result[`div_result<T>`]
 | Result type for the `div_rem_*` functions
@@ -181,8 +197,11 @@ Listed by analogous STL header.
 |===
 | Function | Description
 
-| xref:uint256.adoc#u256_math_operators[`abs`]
-| Absolute value (returns its argument, for parity with the signed type)
+| xref:uint256.adoc#u256_math_operators[`abs`] (`uint256`)
+| Absolute value (returns its argument, since an unsigned value is already non-negative)
+
+| xref:int256.adoc#i256_abs[`abs`] (`int256`)
+| Absolute value; wraps to `BOOST_INT256_INT256_MIN` for that one input, since its magnitude is not representable
 |===
 
 [#api_cstdlib]
@@ -269,6 +288,8 @@ Listed by analogous STL header.
 
 [#api_numeric]
 === xref:numeric.adoc[`<numeric>`]
+
+Every function below has both a `uint256` and an `int256` overload unless noted otherwise.
 
 [cols="1,2", options="header"]
 |===
@@ -407,6 +428,12 @@ Listed by analogous STL header.
 
 | `BOOST_INT256_UINT256_MAX`
 | Maximum value for `uint256`
+
+| `BOOST_INT256_INT256_MAX`
+| Maximum value for `int256`
+
+| `BOOST_INT256_INT256_MIN`
+| Minimum value for `int256`
 |===
 
 === Literals
@@ -417,6 +444,9 @@ Listed by analogous STL header.
 
 | xref:literals.adoc[`BOOST_INT256_UINT256_C`]
 | Unsigned 256-bit constant macro
+
+| xref:literals.adoc[`BOOST_INT256_INT256_C`]
+| Signed 256-bit constant macro
 |===
 
 [#api_macro_configuration]
@@ -501,7 +531,7 @@ Listed by analogous STL header.
 | Character conversion functions
 
 | `<boost/int256/climits.hpp>`
-| Max value macro
+| Min and max value macros for `uint256` and `int256`
 
 | xref:cstdlib.adoc[`<boost/int256/cstdlib.hpp>`]
 | Combined division and modulo function
@@ -513,19 +543,19 @@ Listed by analogous STL header.
 | Formatting integration for pass:[C++20] `<format>`
 
 | xref:hash.adoc[`<boost/int256/hash.hpp>`]
-| `std::hash` specialization for `uint256`
+| `std::hash` specialization for `uint256` and `int256`
 
 | `<boost/int256/int256.hpp>`
-| The xref:uint256.adoc[`uint256`] type
+| The xref:uint256.adoc[`uint256`] and xref:int256.adoc[`int256`] types
 
 | xref:stream.adoc[`<boost/int256/iostream.hpp>`]
-| Iostream overloads for `uint256`
+| Iostream overloads for `uint256` and `int256`
 
 | `<boost/int256/limits.hpp>`
-| Overload for `std::numeric_limits` for `uint256`
+| `std::numeric_limits` specialization for `uint256` and `int256`
 
 | xref:literals.adoc[`<boost/int256/literals.hpp>`]
-| User-defined literals for `uint256`
+| User-defined literals for `uint256` and `int256`
 
 | xref:numeric.adoc[`<boost/int256/numeric.hpp>`]
 | Numeric algorithms (gcd, lcm, midpoint, integer division)

@@ -12,30 +12,34 @@ https://www.boost.org/LICENSE_1_0.txt
 
 Initial release.
 
-=== The type
+=== The types
 
-`boost::int256::uint256` is an unsigned 256-bit integer that is exactly 32 bytes on every platform, trivially copyable, standard layout, and usable in constant expressions from pass:[C++14] onward.
-It stores four `std::uint64_t` words with `words[0]` least significant, in the same order on every platform.
-The full operator set is provided against `uint256`, against every built-in integer type in either operand order, against the compiler's `pass:[__int128]` and `pass:[unsigned __int128]` where those exist, and against the built-in floating-point types under the usual arithmetic conversions.
-See xref:uint256.adoc[uint256] and xref:mixed_type_ops.adoc[Mixed Type Operations].
+`boost::int256::uint256` is an unsigned 256-bit integer, and `boost::int256::int256` is its signed sibling, sharing the same layout: both are exactly 32 bytes on every platform, trivially copyable, standard layout, and usable in constant expressions from pass:[C++14] onward.
+Each stores four `std::uint64_t` words with `words[0]` least significant, in the same order on every platform; `int256` interprets that same word array as two's complement, with the sign in bit 63 of `words[3]`, so a value converts between the two types with a plain bit copy.
+The full operator set is provided for each type on its own, against every built-in integer type in either operand order, against the compiler's `pass:[__int128]` and `pass:[unsigned __int128]` where those exist, against the built-in floating-point types under the usual arithmetic conversions, and against each other under the usual arithmetic conversions (both operands become `uint256`).
+See xref:uint256.adoc[uint256], xref:int256.adoc[int256], and xref:mixed_type_ops.adoc[Mixed Type Operations].
 
-A signed `int256` is planned for a following release, and will use the same header layout, macro names, and word order.
+`int256`'s arithmetic operators (`+ - * pass:[<<] ++ --` and unary `-`) wrap modulo `2^256^`, computed in the unsigned domain, so none of them can trigger signed-overflow undefined behavior; `BOOST_INT256_INT256_MIN / -1` is likewise defined, wrapping to `BOOST_INT256_INT256_MIN`, rather than left undefined the way it is for a built-in signed integer. Text formatting (`iostream`, `to_string`, `<charconv>`, `<format>`, `pass:[{fmt}]`) is sign-magnitude in every base, with the sign written before any base prefix (`-0xff`, not `0x-ff`).
 
 === Features by header
 
-* `<boost/int256/int256.hpp>`: the type, the full operator set, `operator<=>` where the standard library has it, and `abs`.
-* `<boost/int256/limits.hpp>` and `<boost/int256/climits.hpp>`: `std::numeric_limits<uint256>` (`digits` 256, `digits10` 77, `is_modulo` true) and `BOOST_INT256_UINT256_MAX`.
-* `<boost/int256/bit.hpp>`: `has_single_bit`, `countl_zero`, `countl_one`, `countr_zero`, `countr_one`, `bit_width`, `bit_ceil`, `bit_floor`, `rotl`, `rotr`, `popcount`, `byteswap`.
-* `<boost/int256/byte_conversions.hpp>`: `to_be`, `from_be`, `to_le`, `from_le`, and the 32-byte array forms `to_be_bytes`, `to_le_bytes`, `to_ne_bytes` with their `from_*` counterparts.
-* `<boost/int256/numeric.hpp>`: saturating arithmetic, `saturating_cast`, `gcd`, `lcm`, `midpoint`, and the complete P3724 integer division family with `div_result<T>`.
-* `<boost/int256/utilities.hpp>`: `addmod`, `powm`, `ipow`, `isqrt`, the C23 checked operations `ckd_add`, `ckd_sub`, `ckd_mul`, the signedness-safe comparisons `cmp_*`, and `in_range`.
-* `<boost/int256/cstdlib.hpp>`: `div` returning `u256div_t`.
-* `<boost/int256/iostream.hpp>` and `<boost/int256/string.hpp>`: stream insertion and extraction honoring `dec`, `oct`, `hex`, `showbase`, `uppercase`, and the width and fill manipulators, plus `to_string` and `to_wstring`.
-* `<boost/int256/literals.hpp>`: the `_u256` and `_U256` user-defined literals, and `BOOST_INT256_UINT256_C`.
-* `<boost/int256/hash.hpp>`: `std::hash<uint256>` and an ADL `hash_value` for Boost.ContainerHash and Boost.Unordered.
-* `<boost/int256/format.hpp>` and `<boost/int256/fmt_format.hpp>`: `std::formatter` and `fmt::formatter` specializations supporting the integer presentation types and the fill, align, width, and alternate forms.
-* `<boost/int256/charconv.hpp>` (opt-in): `boost::charconv::to_chars` and `from_chars` for bases 2 through 36.
-* `<boost/int256/random.hpp>` (opt-in): the traits that let Boost.Random distributions generate `uint256`.
+* `<boost/int256/int256.hpp>`: both types, the full operator set for each (including the cross-type operators between them), `operator<=>` where the standard library has it, `abs`, and `int256::signed_high()`. Construction from, conversion to, and mixed arithmetic, comparison, and compound assignment with a pass:[C++23] `<stdfloat>` extended type (`std::float16_t`, `float32_t`, `float64_t`, `float128_t`, `bfloat16_t`) are included wherever the current standard library provides that specific type; host only, and, as of this writing, that means GCC 13 and later with libstdc++ (libc++ and MSVC's standard library do not yet provide these types). Conversions are correctly rounded, so `std::float16_t` overflows to infinity above its 65504 magnitude limit. See xref:mixed_type_ops.adoc#mixed_ops_floating_point[Operations With Floating-Point Types].
+* `<boost/int256/limits.hpp>` and `<boost/int256/climits.hpp>`: `std::numeric_limits<uint256>` (`digits` 256, `digits10` 77, `is_modulo` true) and `std::numeric_limits<int256>` (`digits` 255, `digits10` 76, `is_signed` and `is_modulo` true), and `BOOST_INT256_UINT256_MAX`, `BOOST_INT256_INT256_MIN`, `BOOST_INT256_INT256_MAX`.
+* `<boost/int256/bit.hpp>`: `has_single_bit`, `countl_zero`, `countl_one`, `countr_zero`, `countr_one`, `bit_width`, `bit_ceil`, `bit_floor`, `rotl`, `rotr`, `popcount`, `byteswap`. `int256` has no overloads here; it converts implicitly to `uint256`.
+* `<boost/int256/byte_conversions.hpp>`: `to_be`, `from_be`, `to_le`, `from_le`, and the 32-byte array forms `to_be_bytes`, `to_le_bytes`, `to_ne_bytes` with their `from_*` counterparts, for both types.
+* `<boost/int256/numeric.hpp>`: saturating arithmetic, `saturating_cast`, `gcd`, `lcm`, `midpoint`, and the complete P3724 integer division family with `div_result<T>`, for both types (`BOOST_INT256_INT256_MIN / -1` saturates to `BOOST_INT256_INT256_MAX` under `saturating_div`).
+* `<boost/int256/utilities.hpp>`: `addmod`, `powm`, `ipow`, `isqrt`, the C23 checked operations `ckd_add`, `ckd_sub`, `ckd_mul`, the signedness-safe comparisons `cmp_*`, and `in_range`, for both types.
+* `<boost/int256/cstdlib.hpp>`: `div` returning `u256div_t` for `uint256` and `i256div_t` for `int256`.
+* `<boost/int256/iostream.hpp>` and `<boost/int256/string.hpp>`: stream insertion and extraction honoring `dec`, `oct`, `hex`, `showbase`, `uppercase`, and the width and fill manipulators, plus `to_string` and `to_wstring`, for both types. `int256` is sign-magnitude in every base (the sign comes before any base prefix), and `showpos` prints `+` for a non-negative `int256` in decimal.
+* `<boost/int256/literals.hpp>`: the `_u256` / `_U256` and `_i256` / `_I256` user-defined literals, and `BOOST_INT256_UINT256_C` / `BOOST_INT256_INT256_C`. A prefixed `_i256` literal's magnitude parses as `uint256`, so the most negative value can be written as its hex bit pattern.
+* `<boost/int256/hash.hpp>`: `std::hash<uint256>` and `std::hash<int256>`, and an ADL `hash_value` for each, for Boost.ContainerHash and Boost.Unordered.
+* `<boost/int256/format.hpp>` and `<boost/int256/fmt_format.hpp>`: `std::formatter` and `fmt::formatter` specializations supporting the integer presentation types and the fill, align, width, and alternate forms, for both types.
+* `<boost/int256/charconv.hpp>` (opt-in): `boost::charconv::to_chars` and `from_chars` for bases 2 through 36, for both types.
+* `<boost/int256/random.hpp>` (opt-in): the traits that let Boost.Random distributions generate `uint256` or `int256`.
+
+=== int128 defects not repeated here
+
+Three defects found while implementing `int256` against Boost.Int128 as a reference were avoided rather than reproduced: `unsigned_value % INT128_MIN` dividing by zero (int256's `abs` of the minimum value is exact, so no such case arises), `int128 /= uint128` resolving to signed division instead of the mixed-type unsigned one (`int256`'s ten `operator@=(int256&, const uint256&)` overloads compute in the `uint256` domain explicitly), and a negative hex value printing its base prefix before the sign (`int256` always writes the sign first). The same three defects were also fixed in Boost.Int128 itself.
 
 === Platforms
 
@@ -48,4 +52,4 @@ The type and most functions also run in CUDA and SYCL device code.
 * A pass:[C++20] named module: `import boost.int256;`. See xref:config.adoc#build_module[`BOOST_INT256_BUILD_MODULE`].
 * Debugger pretty printers for LLDB, GDB, and MSVC. See xref:printer.adoc[Pretty Printers].
 * A vcpkg port under `ports/int256`.
-* Benchmarks against Boost.Multiprecision. See xref:u256_benchmarks.adoc[Benchmarks].
+* Benchmarks against Boost.Multiprecision, one page per type. See xref:u256_benchmarks.adoc[uint256 Benchmarks] and xref:i256_benchmarks.adoc[int256 Benchmarks].
