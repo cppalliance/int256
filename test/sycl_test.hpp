@@ -34,6 +34,11 @@ constexpr int buf_size {static_cast<int>(boost::int256::detail::mini_to_chars_bu
 // single-source SYCL translation unit, where the device pass would still have to parse them.
 // The words go into named locals first, so the draw order does not depend on the
 // unspecified evaluation order of function arguments. This matches random_uint256.hpp.
+//
+// Signed-aware: T's 4-word constructor takes the top word as std::int64_t, but w3 here
+// is std::uint64_t. Parentheses call the constructor via ordinary argument conversion
+// instead of list-initialization, so the unsigned-to-signed conversion for w3 is not
+// rejected as narrowing. This works identically for uint256.
 template <typename T>
 T random_value(std::mt19937_64& rng)
 {
@@ -42,12 +47,15 @@ T random_value(std::mt19937_64& rng)
     const auto w1 {static_cast<std::uint64_t>(rng())};
     const auto w0 {static_cast<std::uint64_t>(rng())};
 
-    return T{w3, w2, w1, w0};
+    return T(w3, w2, w1, w0);
 }
 
 // Returns a divisor that avoids the divide-by-zero case, so division stays well defined.
 // Applied identically on host and device. The first argument is unused for the unsigned
-// type but is kept so call sites read as safe_divisor(dividend, divisor).
+// type but is kept so call sites read as safe_divisor(dividend, divisor). MIN / -1 is
+// not excluded: both int256 and int128 define it to wrap to MIN (not UB), so it is
+// safe to let the randomized inputs land on it, and the directed pair below in run()
+// forces it every time as well.
 template <typename T>
 inline T safe_divisor(const T, const T b) noexcept
 {
@@ -58,11 +66,23 @@ inline T safe_divisor(const T, const T b) noexcept
     return b;
 }
 
+// A fixed (a, b) pair to overwrite one element with after the random fill, so a
+// specific edge case (e.g. MIN / -1) is exercised by the device path on every run
+// rather than only when the random draw happens to land on it.
+template <typename T>
+struct directed_pair
+{
+    T a;
+    T b;
+};
+
 // Generic runner. op(a, b, i) is evaluated on the device for every element and then
 // re-evaluated on the host; any mismatch fails the test. op must depend only on
-// device-enabled int256 facilities.
+// device-enabled int256 facilities. overrides, when given, replaces elements
+// [0, num_overrides) after the random fill, so a caller can pin specific edge-case
+// inputs (e.g. (MIN, -1)) that a random draw would otherwise hit only rarely, if ever.
 template <typename InT, typename OutT, typename Op>
-int run(Op op)
+int run(Op op, const directed_pair<InT>* overrides = nullptr, int num_overrides = 0)
 {
     sycl::queue q;
     std::cout << "SYCL device: "
@@ -77,6 +97,12 @@ int run(Op op)
     {
         a[i] = random_value<InT>(rng);
         b[i] = random_value<InT>(rng);
+    }
+
+    for (int i {0}; i < num_overrides && i < num_elements; ++i)
+    {
+        a[i] = overrides[i].a;
+        b[i] = overrides[i].b;
     }
 
     q.submit([&](sycl::handler& h)
