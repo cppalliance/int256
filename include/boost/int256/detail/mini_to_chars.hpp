@@ -138,6 +138,22 @@ BOOST_INT256_HOST_DEVICE constexpr char* mini_to_chars(char (&buffer)[mini_to_ch
     return last;
 }
 
+// Sign-magnitude: the magnitude is written by the uint256 overload above (abs() is
+// already exact for min(), whose magnitude is 2^255), and a '-' is prepended for a
+// negative value. The buffer is 258 (sign + 256 binary digits + NUL) so there is always
+// room for the extra character
+BOOST_INT256_HOST_DEVICE constexpr char* mini_to_chars(char (&buffer)[mini_to_chars_buffer_size], const int256& v, const int base, const bool uppercase) noexcept
+{
+    if (v.signed_high() < 0)
+    {
+        char* p {mini_to_chars(buffer, to_unsigned_bits(abs(v)), base, uppercase)};
+        *--p = '-';
+        return p;
+    }
+
+    return mini_to_chars(buffer, to_unsigned_bits(v), base, uppercase);
+}
+
 } // namespace detail
 } // namespace int256
 } // namespace boost

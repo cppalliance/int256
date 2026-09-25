@@ -7,7 +7,7 @@
 #ifndef BOOST_INT256_DETAIL_MINI_FROM_CHARS_HPP
 #define BOOST_INT256_DETAIL_MINI_FROM_CHARS_HPP
 
-#include <boost/int256/detail/uint256_imp.hpp>
+#include <boost/int256/int256.hpp>
 #include <boost/int256/detail/config.hpp>
 
 #ifndef BOOST_INT256_BUILD_MODULE
@@ -272,11 +272,21 @@ BOOST_INT256_TEST_EXPORT BOOST_INT256_HOST_DEVICE constexpr int from_chars(const
     return impl::from_chars_integer_impl<uint256, uint256>(first, last, value, base);
 }
 
-// Parsing entry point for the user-defined literals. Unlike from_chars this skips the
+BOOST_INT256_TEST_EXPORT BOOST_INT256_HOST_DEVICE constexpr int from_chars(const char* first, const char* last, int256& value, int base = 10) noexcept
+{
+    return impl::from_chars_integer_impl<int256, uint256>(first, last, value, base);
+}
+
+// Parsing entry points for the user-defined literals. Unlike from_chars these skip the
 // C++ digit separator ' so that literals such as 1'234'567_u256 are accepted.
 BOOST_INT256_TEST_EXPORT BOOST_INT256_HOST_DEVICE constexpr int from_chars_literal(const char* first, const char* last, uint256& value, int base = 10) noexcept
 {
     return impl::from_chars_integer_impl<uint256, uint256, true>(first, last, value, base);
+}
+
+BOOST_INT256_TEST_EXPORT BOOST_INT256_HOST_DEVICE constexpr int from_chars_literal(const char* first, const char* last, int256& value, int base = 10) noexcept
+{
+    return impl::from_chars_integer_impl<int256, uint256, true>(first, last, value, base);
 }
 
 // Rejects an out of range literal
@@ -368,8 +378,10 @@ BOOST_INT256_HOST_DEVICE constexpr Integer parse_literal(const char* first, cons
         return value;
     }
 
-    // Prefixed: parse the magnitude in the detected base, then reapply the sign.
-    const auto status {from_chars_literal(next, last, value, base)};
+    // Prefixed: parse the magnitude as uint256 in the detected base, reinterpret it as
+    // Integer, then reapply the sign
+    uint256 magnitude {};
+    const auto status {from_chars_literal(next, last, magnitude, base)};
     if (status == EDOM)
     {
         BOOST_INT256_REJECT_LITERAL(parse_literal_out_of_range);
@@ -378,6 +390,24 @@ BOOST_INT256_HOST_DEVICE constexpr Integer parse_literal(const char* first, cons
     {
         BOOST_INT256_REJECT_LITERAL(parse_invalid_literal);
     }
+
+    // from_chars_literal above only range checked the magnitude against uint256's own
+    // full width. A cooked literal never carries a '-' (-X_i256 is unary minus applied
+    // to X_i256, so X alone reaches this function), and only the string/macro forms
+    // pass a '-' through as part of the character sequence, so the bound tightens here:
+    // at most max() with no sign, or 2^255 (one more, min()'s magnitude) with one
+    BOOST_INT256_IF_CONSTEXPR (std::numeric_limits<Integer>::is_signed)
+    {
+        const uint256 limit {negative ? static_cast<uint256>((std::numeric_limits<Integer>::max)()) + UINT64_C(1)
+                                       : static_cast<uint256>((std::numeric_limits<Integer>::max)())};
+
+        if (magnitude > limit)
+        {
+            BOOST_INT256_REJECT_LITERAL(parse_literal_out_of_range);
+        }
+    }
+
+    value = static_cast<Integer>(magnitude);
 
     if (negative)
     {
