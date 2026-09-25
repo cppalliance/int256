@@ -192,6 +192,26 @@ std::uint64_t to_u64(const wide_u256& value)
 
 #endif
 
+// Bitwise NOT by value. uintwide_t's operator~ is a non-const member that flips
+// the value in place, so it needs a copy to act on.
+template <typename T>
+T bit_not(const T& value)
+{
+    return ~value;
+}
+
+#ifdef BOOST_INT256_BENCHMARK_WIDE_INTEGER
+
+template <>
+wide_u256 bit_not(const wide_u256& value)
+{
+    wide_u256 result {value};
+    static_cast<void>(~result);
+    return result;
+}
+
+#endif
+
 //=====================================
 // Data
 //=====================================
@@ -453,7 +473,7 @@ void run_bitwise(const std::vector<T>& in, const std::vector<int>& counts, std::
     stream_binary(in, out, [](const T& a, const T& b) { return a & b; }, "and");
     stream_binary(in, out, [](const T& a, const T& b) { return a | b; }, "or");
     stream_binary(in, out, [](const T& a, const T& b) { return a ^ b; }, "xor");
-    stream_unary(in, out, [](const T& a) { return ~a; }, "not");
+    stream_unary(in, out, [](const T& a) { return bit_not(a); }, "not");
     stream_shift(in, counts, out, [](const T& a, const int s) { return a << s; }, "shl");
     stream_shift(in, counts, out, [](const T& a, const int s) { return a >> s; }, "shr");
 }

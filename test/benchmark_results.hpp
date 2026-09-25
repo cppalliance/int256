@@ -5,9 +5,9 @@
 #ifndef BOOST_INT256_TEST_BENCHMARK_RESULTS_HPP
 #define BOOST_INT256_TEST_BENCHMARK_RESULTS_HPP
 
-// Command line handling and result collection for benchmark_u256.cpp (and the
-// signed driver once int256 lands). Every timing is printed to stderr as measured
-// and is additionally recorded here. With --json <path> the whole run is written
+// Command line handling and result collection shared by benchmark_u256.cpp and
+// benchmark_i256.cpp. Every timing is printed to stderr as measured and is
+// additionally recorded here. With --json <path> the whole run is written
 // out as the data set that doc/render_benchmarks.py turns into the documentation
 // tables and plots, so refreshing the documentation never needs numbers to be
 // transcribed by hand.
