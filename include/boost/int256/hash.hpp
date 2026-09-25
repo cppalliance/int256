@@ -69,6 +69,21 @@ struct hash<boost::int256::uint256>
     }
 };
 
+// Same algorithm as uint256, run on int256's own words directly: the hash is of the
+// two's complement bit pattern, not a magnitude, so hash(v) != hash(-v) in general
+template <>
+struct hash<boost::int256::int256>
+{
+    auto operator()(const boost::int256::int256& v) const noexcept -> std::size_t
+    {
+        std::size_t seed {boost::int256::detail::hash_finalize_64(v.words[0])};
+        seed = boost::int256::detail::hash_combine_64(seed, v.words[1]);
+        seed = boost::int256::detail::hash_combine_64(seed, v.words[2]);
+        seed = boost::int256::detail::hash_combine_64(seed, v.words[3]);
+        return seed;
+    }
+};
+
 } // namespace std
 
 namespace boost {
@@ -77,6 +92,11 @@ namespace int256 {
 BOOST_INT256_EXPORT inline std::size_t hash_value(const uint256& v) noexcept
 {
     return std::hash<uint256>{}(v);
+}
+
+BOOST_INT256_EXPORT inline std::size_t hash_value(const int256& v) noexcept
+{
+    return std::hash<int256>{}(v);
 }
 
 } // namespace int256
