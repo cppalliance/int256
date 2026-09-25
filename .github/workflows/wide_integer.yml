@@ -113,7 +113,7 @@ jobs:
       - uses: actions/checkout@v6
       - name: Clone wide-integer
         run: git clone -b master --depth 1 https://github.com/ckormanyos/wide-integer.git ../wide-integer
-      - uses: TheMrMilchmann/setup-msvc-dev@v4
+      - uses: ./.github/actions/setup-msvc
         with:
           arch: ${{ matrix.arch }}
       # Options are spelled with a dash: git-bash rewrites a leading slash as a path

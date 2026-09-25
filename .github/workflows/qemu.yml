@@ -95,7 +95,7 @@ jobs:
         with:
           # For coverage builds fetch the whole history, else only 1 commit using a 'fake ternary'
           fetch-depth: ${{ matrix.coverage && '0' || '1' }}
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         if: env.GHA_USE_NODE_20 == 'true'
         with:
           # For coverage builds fetch the whole history, else only 1 commit using a 'fake ternary'
@@ -110,7 +110,7 @@ jobs:
           restore-keys: ${{matrix.os}}-${{matrix.container}}-${{matrix.compiler}}-
 
       - name: Cache ccache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         if: env.B2_USE_CCACHE && env.GHA_USE_NODE_20 == 'true'
         with:
           path: ~/.ccache
@@ -126,7 +126,7 @@ jobs:
           path: boost-ci-cloned
 
       - name: Fetch Boost.CI
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         if: env.GHA_USE_NODE_20 == 'true'
         with:
           repository: boostorg/boost-ci
