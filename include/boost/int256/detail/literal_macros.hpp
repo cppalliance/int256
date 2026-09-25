@@ -13,5 +13,6 @@
 
 #define BOOST_INT256_STRINGIFY(x) #x
 #define BOOST_INT256_UINT256_C(x) boost::int256::literals::operator""_u256(BOOST_INT256_STRINGIFY(x))
+#define BOOST_INT256_INT256_C(x) boost::int256::literals::operator""_i256(BOOST_INT256_STRINGIFY(x))
 
 #endif // BOOST_INT256_DETAIL_LITERAL_MACROS_HPP
