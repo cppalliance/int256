@@ -5,6 +5,13 @@
 #  Version 1.0. (See accompanying file LICENSE_1_0.txt
 #  or copy at http://www.boost.org/LICENSE_1_0.txt)
 # ------------------------------------------------------------------------------
+#
+# Differential fuzzing of uint256 and int256 against wide-integer's uintwide_t,
+# one fuzzer per operator in test/fuzzing. Each job builds and runs one type's
+# fuzzers in one configuration, one after the other, so the four jobs run side
+# by side. The fuzzers entry lists name:seconds pairs; a name expands to
+# test/fuzzing/test_fuzzing_<name>_versus_wide_int.cpp. Division and modulo get
+# the longest budget since they have the most code paths.
 
 name: fuzz
 on:
@@ -17,6 +24,7 @@ on:
     types: [opened, synchronize, reopened]
 jobs:
   clang-fuzzing-versus-wide-integer:
+    name: ${{ matrix.title }}
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -24,9 +32,21 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        compiler: [ clang++ ]
+        include:
+          - title: uint256
+            fuzzers: 'add:300 sub:300 mul:300 div:600 mod:600'
+            defines: ''
+          - title: uint256 (no builtin 128-bit)
+            fuzzers: 'add:300 sub:300 mul:300 div:600 mod:600'
+            defines: '-DBOOST_INT256_NO_BUILTIN_INT128=1'
+          - title: int256
+            fuzzers: 'add_signed:300 sub_signed:300 mul_signed:300 div_signed:600 mod_signed:600'
+            defines: ''
+          - title: int256 (no builtin 128-bit)
+            fuzzers: 'add_signed:300 sub_signed:300 mul_signed:300 div_signed:600 mod_signed:600'
+            defines: '-DBOOST_INT256_NO_BUILTIN_INT128=1'
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: '0'
       - name: update-tools
@@ -37,65 +57,13 @@ jobs:
           git clone -b master --depth 1 https://github.com/ckormanyos/wide-integer.git ${{runner.workspace}}/wide-integer
       - name: clang-fuzzing-versus-wide-integer
         run: |
-          ${{ matrix.compiler }} -v
-          echo 'compiling test/fuzzing/test_fuzzing_div_versus_wide_int.cpp'
-          ${{ matrix.compiler }} -std=c++20 -g -O2 -Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion -fsanitize=fuzzer -I./include -I${{runner.workspace}}/wide-integer test/fuzzing/test_fuzzing_div_versus_wide_int.cpp -o test_fuzzing_div_versus_wide_int
-          echo "run test_fuzzing_div_versus_wide_int"
-          ./test_fuzzing_div_versus_wide_int -max_total_time=600 -max_len=64 -verbosity=0 -close_fd_mask=3
-
-          echo 'compiling test/fuzzing/test_fuzzing_add_versus_wide_int.cpp'
-          ${{ matrix.compiler }} -std=c++20 -g -O2 -Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion -fsanitize=fuzzer -I./include -I${{runner.workspace}}/wide-integer test/fuzzing/test_fuzzing_add_versus_wide_int.cpp -o test_fuzzing_add_versus_wide_int
-          echo "run test_fuzzing_add_versus_wide_int"
-          ./test_fuzzing_add_versus_wide_int -max_total_time=300 -max_len=64 -verbosity=0 -close_fd_mask=3
-          
-          echo 'compiling test/fuzzing/test_fuzzing_sub_versus_wide_int.cpp'
-          ${{ matrix.compiler }} -std=c++20 -g -O2 -Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion -fsanitize=fuzzer -I./include -I${{runner.workspace}}/wide-integer test/fuzzing/test_fuzzing_sub_versus_wide_int.cpp -o test_fuzzing_sub_versus_wide_int
-          echo "run test_fuzzing_sub_versus_wide_int"
-          ./test_fuzzing_sub_versus_wide_int -max_total_time=300 -max_len=64 -verbosity=0 -close_fd_mask=3
-          
-          echo 'compiling test/fuzzing/test_fuzzing_mul_versus_wide_int.cpp'
-          ${{ matrix.compiler }} -std=c++20 -g -O2 -Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion -fsanitize=fuzzer -I./include -I${{runner.workspace}}/wide-integer test/fuzzing/test_fuzzing_mul_versus_wide_int.cpp -o test_fuzzing_mul_versus_wide_int
-          echo "run test_fuzzing_mul_versus_wide_int"
-          ./test_fuzzing_mul_versus_wide_int -max_total_time=300 -max_len=64 -verbosity=0 -close_fd_mask=3
-
-  clang-fuzzing-versus-wide-integer-no-builtin:
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        shell: bash
-    strategy:
-      fail-fast: false
-      matrix:
-        compiler: [ clang++ ]
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: '0'
-      - name: update-tools
-        run: sudo apt install llvm lld
-      - name: clone-wide-integer
-        working-directory: ${{runner.workspace}}
-        run: |
-          git clone -b master --depth 1 https://github.com/ckormanyos/wide-integer.git ${{runner.workspace}}/wide-integer
-      - name: clang-fuzzing-versus-wide-integer
-        run: |
-          ${{ matrix.compiler }} -v
-          echo 'compiling test/fuzzing/test_fuzzing_div_versus_wide_int.cpp'
-          ${{ matrix.compiler }} -std=c++20 -g -O2 -Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion -fsanitize=fuzzer -I./include -I${{runner.workspace}}/wide-integer -DBOOST_INT256_NO_BUILTIN_INT128=1 test/fuzzing/test_fuzzing_div_versus_wide_int.cpp -o test_fuzzing_div_versus_wide_int
-          echo "run test_fuzzing_div_versus_wide_int"
-          ./test_fuzzing_div_versus_wide_int -max_total_time=600 -max_len=64 -verbosity=0 -close_fd_mask=3
-          
-          echo 'compiling test/fuzzing/test_fuzzing_add_versus_wide_int.cpp'
-          ${{ matrix.compiler }} -std=c++20 -g -O2 -Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion -fsanitize=fuzzer -I./include -I${{runner.workspace}}/wide-integer -DBOOST_INT256_NO_BUILTIN_INT128=1 test/fuzzing/test_fuzzing_add_versus_wide_int.cpp -o test_fuzzing_add_versus_wide_int
-          echo "run test_fuzzing_add_versus_wide_int"
-          ./test_fuzzing_add_versus_wide_int -max_total_time=300 -max_len=64 -verbosity=0 -close_fd_mask=3
-          
-          echo 'compiling test/fuzzing/test_fuzzing_sub_versus_wide_int.cpp'
-          ${{ matrix.compiler }} -std=c++20 -g -O2 -Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion -fsanitize=fuzzer -I./include -I${{runner.workspace}}/wide-integer -DBOOST_INT256_NO_BUILTIN_INT128=1 test/fuzzing/test_fuzzing_sub_versus_wide_int.cpp -o test_fuzzing_sub_versus_wide_int
-          echo "run test_fuzzing_sub_versus_wide_int"
-          ./test_fuzzing_sub_versus_wide_int -max_total_time=300 -max_len=64 -verbosity=0 -close_fd_mask=3
-          
-          echo 'compiling test/fuzzing/test_fuzzing_mul_versus_wide_int.cpp'
-          ${{ matrix.compiler }} -std=c++20 -g -O2 -Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion -fsanitize=fuzzer -I./include -I${{runner.workspace}}/wide-integer -DBOOST_INT256_NO_BUILTIN_INT128=1 test/fuzzing/test_fuzzing_mul_versus_wide_int.cpp -o test_fuzzing_mul_versus_wide_int
-          echo "run test_fuzzing_mul_versus_wide_int"
-          ./test_fuzzing_mul_versus_wide_int -max_total_time=300 -max_len=64 -verbosity=0 -close_fd_mask=3
+          clang++ -v
+          for entry in ${{ matrix.fuzzers }}; do
+            name="test_fuzzing_${entry%%:*}_versus_wide_int"
+            seconds="${entry##*:}"
+            echo "compiling test/fuzzing/$name.cpp"
+            clang++ -std=c++20 -g -O2 -Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion -fsanitize=fuzzer \
+              -I./include -I${{runner.workspace}}/wide-integer ${{ matrix.defines }} "test/fuzzing/$name.cpp" -o "$name"
+            echo "run $name for $seconds seconds"
+            "./$name" -max_total_time="$seconds" -max_len=64 -verbosity=0 -close_fd_mask=3
+          done
