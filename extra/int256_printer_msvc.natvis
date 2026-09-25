@@ -5,4 +5,9 @@
 		<DisplayString IncludeView="dec" LegacyAddin="int256_printer_msvc.dll" Export="formatter_u256_dec"/>
 		<DisplayString IncludeView="hex" LegacyAddin="int256_printer_msvc.dll" Export="formatter_u256_hex"/>
 	</Type>
+	<Type Name="boost::int256::int256">
+		<DisplayString ExcludeView="dec;hex" LegacyAddin="int256_printer_msvc.dll" Export="formatter_s256_dec"/>
+		<DisplayString IncludeView="dec" LegacyAddin="int256_printer_msvc.dll" Export="formatter_s256_dec"/>
+		<DisplayString IncludeView="hex" LegacyAddin="int256_printer_msvc.dll" Export="formatter_s256_hex"/>
+	</Type>
 </AutoVisualizer>

@@ -2,8 +2,9 @@
 // Distributed under the Boost Software License, Version 1.0.
 // https://www.boost.org/LICENSE_1_0.txt
 //
-// MSVC debugger add-in (LegacyAddin) that formats boost::int256::uint256
-// through detail::mini_to_chars. Build with int256_printer_msvc.bat.
+// MSVC debugger add-in (LegacyAddin) that formats boost::int256::uint256 and
+// boost::int256::int256 through detail::mini_to_chars. Build with
+// int256_printer_msvc.bat.
 
 #define WIN32_LEAN_AND_MEAN
 #include <Windows.h>
@@ -172,6 +173,8 @@ static inline HRESULT formatter_256(DWORD const address, DEBUGHELPER_t* const he
 
 extern "C" __declspec(dllexport) HRESULT __stdcall formatter_u256_dec(DWORD const address, DEBUGHELPER_t* const helper, int const base, BOOL const unicode, char* const result, size_t const maximum, DWORD const reserved);
 extern "C" __declspec(dllexport) HRESULT __stdcall formatter_u256_hex(DWORD const address, DEBUGHELPER_t* const helper, int const base, BOOL const unicode, char* const result, size_t const maximum, DWORD const reserved);
+extern "C" __declspec(dllexport) HRESULT __stdcall formatter_s256_dec(DWORD const address, DEBUGHELPER_t* const helper, int const base, BOOL const unicode, char* const result, size_t const maximum, DWORD const reserved);
+extern "C" __declspec(dllexport) HRESULT __stdcall formatter_s256_hex(DWORD const address, DEBUGHELPER_t* const helper, int const base, BOOL const unicode, char* const result, size_t const maximum, DWORD const reserved);
 
 
 __declspec(dllexport) HRESULT __stdcall formatter_u256_dec(DWORD const address, DEBUGHELPER_t* const helper, int const base, BOOL const unicode, char* const result, size_t const maximum, DWORD const reserved)
@@ -182,6 +185,18 @@ __declspec(dllexport) HRESULT __stdcall formatter_u256_dec(DWORD const address, 
 __declspec(dllexport) HRESULT __stdcall formatter_u256_hex(DWORD const address, DEBUGHELPER_t* const helper, int const base, BOOL const unicode, char* const result, size_t const maximum, DWORD const reserved)
 {
 	return formatter_256<boost::int256::uint256, 16>(address, helper, base, unicode, result, maximum, reserved);
+}
+
+// int256's mini_to_chars is sign-magnitude: the '-' is written before any
+// digits, so this formatter needs no separate negative-value handling.
+__declspec(dllexport) HRESULT __stdcall formatter_s256_dec(DWORD const address, DEBUGHELPER_t* const helper, int const base, BOOL const unicode, char* const result, size_t const maximum, DWORD const reserved)
+{
+	return formatter_256<boost::int256::int256, 10>(address, helper, base, unicode, result, maximum, reserved);
+}
+
+__declspec(dllexport) HRESULT __stdcall formatter_s256_hex(DWORD const address, DEBUGHELPER_t* const helper, int const base, BOOL const unicode, char* const result, size_t const maximum, DWORD const reserved)
+{
+	return formatter_256<boost::int256::int256, 16>(address, helper, base, unicode, result, maximum, reserved);
 }
 
 BOOL APIENTRY DllMain(HMODULE const hmodule, DWORD  const reason, LPVOID const reserved)
