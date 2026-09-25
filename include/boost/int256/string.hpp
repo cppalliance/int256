@@ -19,7 +19,7 @@ namespace boost {
 namespace int256 {
 
 BOOST_INT256_EXPORT template <typename T>
-auto to_string(const T& value) -> std::enable_if_t<std::is_same<T, uint256>::value, std::string>
+auto to_string(const T& value) -> std::enable_if_t<std::is_same<T, uint256>::value || std::is_same<T, int256>::value, std::string>
 {
     char buffer[detail::mini_to_chars_buffer_size] {};
     const auto last {detail::mini_to_chars(buffer, value, 10, false)};
@@ -27,7 +27,7 @@ auto to_string(const T& value) -> std::enable_if_t<std::is_same<T, uint256>::val
 }
 
 BOOST_INT256_EXPORT template <typename T>
-auto to_wstring(const T& value) -> std::enable_if_t<std::is_same<T, uint256>::value, std::wstring>
+auto to_wstring(const T& value) -> std::enable_if_t<std::is_same<T, uint256>::value || std::is_same<T, int256>::value, std::wstring>
 {
     char buffer[detail::mini_to_chars_buffer_size] {};
     const auto last {detail::mini_to_chars(buffer, value, 10, false)};
