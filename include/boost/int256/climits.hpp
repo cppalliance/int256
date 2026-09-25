@@ -5,7 +5,7 @@
 #ifndef BOOST_INT256_CLIMITS_HPP
 #define BOOST_INT256_CLIMITS_HPP
 
-#include <boost/int256/detail/uint256_imp.hpp>
+#include <boost/int256/int256.hpp>
 
 #ifndef BOOST_INT256_BUILD_MODULE
 
@@ -15,5 +15,7 @@
 #endif
 
 #define BOOST_INT256_UINT256_MAX boost::int256::uint256{UINT64_MAX, UINT64_MAX, UINT64_MAX, UINT64_MAX}
+#define BOOST_INT256_INT256_MAX  boost::int256::int256{INT64_MAX, UINT64_MAX, UINT64_MAX, UINT64_MAX}
+#define BOOST_INT256_INT256_MIN  boost::int256::int256{INT64_MIN, UINT64_C(0), UINT64_C(0), UINT64_C(0)}
 
 #endif // BOOST_INT256_CLIMITS_HPP
