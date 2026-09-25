@@ -61,5 +61,40 @@ int main()
     std::cout << "Same digits as to_string: "
               << (std::wstring{small_str.begin(), small_str.end()} == wide) << std::endl;
 
+    std::cout << "\n=== to_string with int256 ===" << std::endl;
+
+    using boost::int256::int256;
+
+    // For values that fit in 64 bits the result matches std::to_string exactly,
+    // including the sign
+    constexpr int256 s_negative {-42};
+    const auto s_neg_str {to_string(s_negative)};
+    const auto s_neg_std {std::to_string(std::int64_t{-42})};
+    std::cout << "to_string(-42):              " << s_neg_str << std::endl;
+    std::cout << "std::to_string(int64_t -42): " << s_neg_std << std::endl;
+    std::cout << "Match: " << (s_neg_str == s_neg_std) << std::endl;
+
+    constexpr int256 s_large {INT64_MAX};
+    const auto s_large_str {to_string(s_large)};
+    const auto s_large_std {std::to_string(INT64_MAX)};
+    std::cout << "\nto_string(INT64_MAX):       " << s_large_str << std::endl;
+    std::cout << "std::to_string(INT64_MAX): " << s_large_std << std::endl;
+    std::cout << "Match: " << (s_large_str == s_large_std) << std::endl;
+
+    std::cout << "\n=== int256 values beyond the 64-bit range ===" << std::endl;
+
+    // INT256_MIN via a negated numeric literal fails: the sign is not part of
+    // the literal, so the positive magnitude 2^255 is read first and rejected
+    // as out of range. A string literal keeps the sign with the digits, so it
+    // parses cleanly, and so does the macro.
+    const auto large_negative {"-57896044618658097711785492504343953926634992332820282019728792003956564819968"_i256};
+    std::cout << "int256 min with string literal: " << to_string(large_negative) << std::endl;
+
+    const auto large_negative_c {BOOST_INT256_INT256_C(-57896044618658097711785492504343953926634992332820282019728792003956564819968)};
+    std::cout << "int256 min with INT256_C macro: " << to_string(large_negative_c) << std::endl;
+
+    const auto large_positive {(std::numeric_limits<int256>::max)()};
+    std::cout << "int256 max: " << to_string(large_positive) << std::endl;
+
     return 0;
 }

@@ -28,6 +28,7 @@ void print_bytes(const char* label, const Bytes& bytes)
 int main()
 {
     using boost::int256::uint256;
+    using boost::int256::int256;
 
     // The 32 bytes 01 02 ... 20 read as a big-endian value, four words most
     // significant first
@@ -67,6 +68,32 @@ int main()
                   "Round trip through little-endian bytes");
     static_assert(boost::int256::from_ne_bytes<uint256>(boost::int256::to_ne_bytes(value)) == value,
                   "Round trip through native bytes");
+
+    std::cout << "\n=== Signed values ===" << std::endl;
+
+    // The two's complement bit pattern is what gets reversed, so a negative
+    // int256 needs no special handling: the sign bit is just bit 63 of the
+    // last byte written (or the first, for to_be_bytes).
+    constexpr int256 negative {-300};
+
+    print_bytes("to_be_bytes(-300):", boost::int256::to_be_bytes(negative));
+    std::cout << "from_be_bytes:     "
+              << boost::int256::from_be_bytes<int256>(boost::int256::to_be_bytes(negative)) << std::endl;
+
+    static_assert(boost::int256::from_be_bytes<int256>(boost::int256::to_be_bytes(negative)) == negative,
+                  "Round trip through big-endian bytes (signed)");
+
+    // uint256 and int256 share the same 32-byte layout, so the same wire bytes
+    // convert to either type; only the interpretation of the top bit differs
+    constexpr std::array<std::uint8_t, sizeof(int256)> negative_one_wire
+    {{
+        0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+        0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+        0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+        0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF
+    }};
+    std::cout << "As uint256 (max): " << boost::int256::from_be_bytes<uint256>(negative_one_wire) << std::endl;
+    std::cout << "As int256 (-1):   " << boost::int256::from_be_bytes<int256>(negative_one_wire) << std::endl;
 
     std::cout << "\n=== Whole value conversions ===" << std::endl;
 

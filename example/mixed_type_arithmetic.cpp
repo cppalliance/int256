@@ -84,5 +84,44 @@ int main()
     std::cout << "static_cast<bool>(uint256{0}) = " << static_cast<bool>(uint256{0U}) << std::endl;
     std::cout << "static_cast<bool>(wide)       = " << static_cast<bool>(wide) << std::endl;
 
+    std::cout << "\n=== Mixed Type Arithmetic with int256 ===" << std::endl;
+
+    using boost::int256::int256;
+
+    constexpr int256 signed_value {-3};
+    std::cout << "signed_value = " << signed_value << std::endl;
+
+    // Every built-in integer fits inside int256's range, so the operation is
+    // always mathematically exact: there is no mixed sign trap here the way
+    // there is between uint256 and a negative builtin above.
+    std::cout << "signed_value + 1U = " << (signed_value + 1U) << std::endl;
+    std::cout << "signed_value - 4U = " << (signed_value - 4U) << std::endl;
+    std::cout << "signed_value * 2  = " << (signed_value * 2) << std::endl;
+    std::cout << "signed_value / 4U = " << (signed_value / 4U) << std::endl;
+
+    std::cout << "\n=== int256 and uint256 Follow the Same Rule as uint256 and a Builtin ===" << std::endl;
+
+    // int256 and uint256 use the usual arithmetic conversions with each other
+    // too: both become uint256, so the same "converted, not compared as
+    // signed" trap from above applies between the two library types as well.
+    std::cout << "int256{-1} < uint256{1}   = " << (int256{-1} < uint256{1U})
+              << " (the -1 becomes uint256 max)" << std::endl;
+    std::cout << "int256{-1} + uint256{1}   = " << (int256{-1} + uint256{1U})
+              << " (result type is uint256)" << std::endl;
+
+    std::cout << "\n=== Compound Assignment Between int256 and uint256 ===" << std::endl;
+
+    // int256's ten operator@=(int256&, const uint256&) overloads are the one
+    // place this library computes a compound assignment in a domain other
+    // than *this's own type: dividing or shifting by a uint256 happens
+    // entirely in the uint256 domain, and only the final result converts
+    // back, matching what long long /= unsigned long long does at 64 bits.
+    // (Boost.Int128's int128 /= uint128 has no such overload and divides
+    // signed instead, which this library does not repeat.)
+    int256 dividend {-10};
+    dividend /= uint256{3U};
+    std::cout << "int256{-10} /= uint256{3} -> " << dividend
+              << " ((uint256)-10 / 3, converted back)" << std::endl;
+
     return 0;
 }

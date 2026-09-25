@@ -106,5 +106,33 @@ int main()
 
     std::cout << "isqrt(2^200) by bisection = " << lo << " (= 2^100)" << std::endl;
 
+    std::cout << "\n=== gcd, lcm and midpoint with int256 ===" << std::endl;
+
+    using boost::int256::int256;
+
+    // gcd and lcm work on the uint256 magnitudes of the operands, so the
+    // result is always non-negative regardless of the operands' signs
+    constexpr int256 neg_a {-48};
+    constexpr int256 pos_b {18};
+    std::cout << "gcd(" << neg_a << ", " << pos_b << ") = " << boost::int256::gcd(neg_a, pos_b)
+              << " (always non-negative)" << std::endl;
+
+    // gcd(MIN, 0) is the one case whose magnitude is not representable as a
+    // positive int256; like unary -, it wraps rather than being undefined
+    constexpr auto min_value {(std::numeric_limits<int256>::min)()};
+    std::cout << "gcd(MIN, 0) = " << boost::int256::gcd(min_value, int256{0}) << " (wraps to MIN)" << std::endl;
+
+    std::cout << "\n--- Signed midpoint ---" << std::endl;
+
+    constexpr int256 neg {-100};
+    constexpr int256 pos {100};
+    std::cout << "midpoint(" << neg << ", " << pos << ") = "
+              << boost::int256::midpoint(neg, pos) << std::endl;
+
+    constexpr int256 neg2 {-100};
+    constexpr int256 neg3 {-50};
+    std::cout << "midpoint(" << neg2 << ", " << neg3 << ") = "
+              << boost::int256::midpoint(neg2, neg3) << std::endl;
+
     return 0;
 }

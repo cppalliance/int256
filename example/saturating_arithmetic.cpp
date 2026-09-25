@@ -72,5 +72,44 @@ int main()
               << boost::int256::saturating_cast<std::uint64_t>(uint256{42U})
               << " (fits, so it is exact)" << std::endl;
 
+    std::cout << "\n=== Saturating Arithmetic with int256 ===" << std::endl;
+
+    using boost::int256::int256;
+
+    constexpr auto int_max {(std::numeric_limits<int256>::max)()};
+    constexpr auto int_min {(std::numeric_limits<int256>::min)()};
+
+    std::cout << "int256 max = " << int_max << std::endl;
+    std::cout << "int256 min = " << int_min << std::endl;
+
+    // Saturating arithmetic is especially useful for a signed type, since the
+    // operators wrap silently rather than being undefined the way a built-in
+    // signed integer's overflow is.
+    std::cout << "saturating_add(int_max, 1) = " << boost::int256::saturating_add(int_max, int256{1})
+              << " (saturates to int_max; the operator wraps to int_min)" << std::endl;
+    std::cout << "saturating_sub(int_min, 1) = " << boost::int256::saturating_sub(int_min, int256{1})
+              << " (saturates to int_min)" << std::endl;
+
+    std::cout << "saturating_mul(int_max, 2) = " << boost::int256::saturating_mul(int_max, int256{2})
+              << " (saturates to int_max)" << std::endl;
+    std::cout << "saturating_mul(-(int_max - 2), 5) = "
+              << boost::int256::saturating_mul(-(int_max - int256{2}), int256{5})
+              << " (saturates to int_min)" << std::endl;
+
+    // The only case in the library where saturating_div overflows is x = MIN
+    // and y = -1, whose true (unsaturated) quotient wraps back to MIN.
+    std::cout << "saturating_div(int_min, -1) = " << boost::int256::saturating_div(int_min, int256{-1})
+              << " (saturates to int_max)" << std::endl;
+
+    std::cout << "saturating_cast<int256>(uint256 max) = "
+              << boost::int256::saturating_cast<int256>(max_value)
+              << " (saturates to int_max)" << std::endl;
+    std::cout << "saturating_cast<uint256>(int256 min) = "
+              << boost::int256::saturating_cast<uint256>(int_min)
+              << " (clamps a negative source to 0)" << std::endl;
+    std::cout << "saturating_cast<std::int64_t>(int_max) = "
+              << boost::int256::saturating_cast<std::int64_t>(int_max)
+              << " (saturates to INT64_MAX)" << std::endl;
+
     return 0;
 }

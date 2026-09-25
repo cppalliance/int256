@@ -5,11 +5,14 @@
 #include <boost/int256/int256.hpp>
 #include <boost/int256/cstdlib.hpp>
 #include <boost/int256/iostream.hpp>
+#include <boost/int256/limits.hpp>
 #include <iostream>
+#include <limits>
 
 int main()
 {
     using boost::int256::uint256;
+    using boost::int256::int256;
     using boost::int256::div;
 
     std::cout << "=== div() Function ===" << std::endl;
@@ -64,6 +67,46 @@ int main()
 
     const auto by_self {div(wide_divisor, wide_divisor)};
     std::cout << "x / x = " << by_self.quot << " remainder " << by_self.rem << std::endl;
+
+    std::cout << "\n=== div() with int256 (returns i256div_t) ===" << std::endl;
+
+    // Signed division. The division works on the uint256 magnitudes of the
+    // operands, so quot's sign is sign(x) != sign(y) and rem takes the sign
+    // of the dividend, exactly matching the built-in signed division.
+    constexpr int256 signed_dividend {-100};
+    constexpr int256 signed_divisor {7};
+
+    const auto sresult {div(signed_dividend, signed_divisor)};
+    std::cout << signed_dividend << " / " << signed_divisor << " = " << sresult.quot
+              << " remainder " << sresult.rem << std::endl;
+
+    std::cout << "\n--- Sign Combinations ---" << std::endl;
+
+    constexpr int256 pos {17};
+    constexpr int256 neg {-17};
+    constexpr int256 div_pos {5};
+    constexpr int256 div_neg {-5};
+
+    const auto pp {div(pos, div_pos)};
+    const auto pn {div(pos, div_neg)};
+    const auto np {div(neg, div_pos)};
+    const auto nn {div(neg, div_neg)};
+
+    std::cout << " 17 /  5 = " << pp.quot << " remainder " << pp.rem << std::endl;
+    std::cout << " 17 / -5 = " << pn.quot << " remainder " << pn.rem << std::endl;
+    std::cout << "-17 /  5 = " << np.quot << " remainder " << np.rem << std::endl;
+    std::cout << "-17 / -5 = " << nn.quot << " remainder " << nn.rem << std::endl;
+
+    std::cout << "\n--- MIN / -1, the one signed overflow this library defines ---" << std::endl;
+
+    // A built-in int128 division would be undefined here; int256 wraps the
+    // quotient back to MIN and the remainder is 0, matching every other
+    // two's-complement wrap-around operator in the library.
+    constexpr int256 min_value {(std::numeric_limits<int256>::min)()};
+    const auto min_by_neg_one {div(min_value, int256{-1})};
+    std::cout << "MIN / -1 = " << min_by_neg_one.quot
+              << " remainder " << min_by_neg_one.rem << std::endl;
+    std::cout << "Quotient equals MIN: " << std::boolalpha << (min_by_neg_one.quot == min_value) << std::endl;
 
     return 0;
 }

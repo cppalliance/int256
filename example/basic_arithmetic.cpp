@@ -91,5 +91,67 @@ int main()
     // abs is provided for parity with the signed type and returns its argument.
     std::cout << "abs(x) = " << boost::int256::abs(x) << std::endl;
 
+    std::cout << "\n=== Signed 256-bit Arithmetic ===" << std::endl;
+
+    using boost::int256::int256;
+
+    int256 sx {1000000000000LL};   // 1 trillion
+    int256 sy {-999999999999LL};   // Just under negative 1 trillion
+
+    std::cout << "sx = " << sx << std::endl;
+    std::cout << "sy = " << sy << std::endl;
+
+    std::cout << "\nAddition and Subtraction:" << std::endl;
+    std::cout << "sx + sy = " << (sx + sy) << std::endl;
+    std::cout << "sx - sy = " << (sx - sy) << std::endl;
+
+    std::cout << "\nMultiplication:" << std::endl;
+    std::cout << "sx * sy = " << (sx * sy) << std::endl;
+
+    std::cout << "\nDivision and Modulo:" << std::endl;
+    // The quotient truncates toward zero and the remainder takes the sign of
+    // the dividend, exactly as for a built-in signed type.
+    std::cout << "sx / 7 = " << (sx / 7) << std::endl;
+    std::cout << "sx % 7 = " << (sx % 7) << std::endl;
+    std::cout << "sy / 7 = " << (sy / 7) << std::endl;
+    std::cout << "sy % 7 = " << (sy % 7) << std::endl;
+
+    std::cout << "\nComparisons:" << std::endl;
+    std::cout << "sx > sy:  " << (sx > sy) << std::endl;
+    std::cout << "sx == sy: " << (sx == sy) << std::endl;
+    std::cout << "sx != sy: " << (sx != sy) << std::endl;
+
+    std::cout << "\nNegative values and absolute value:" << std::endl;
+    const int256 negative {-42};
+    std::cout << "negative = " << negative << std::endl;
+    std::cout << "abs(negative) = " << boost::int256::abs(negative) << std::endl;
+
+    std::cout << "\nCompound assignment operators:" << std::endl;
+    int256 sz {100};
+    std::cout << "sz = " << sz << std::endl;
+
+    sz += 50;
+    std::cout << "sz += 50: " << sz << std::endl;
+
+    sz -= 125;
+    std::cout << "sz -= 125: " << sz << std::endl;
+
+    sz *= 2;
+    std::cout << "sz *= 2:  " << sz << std::endl;
+
+    sz /= 5;
+    std::cout << "sz /= 5:  " << sz << std::endl;
+
+    sz %= 7;
+    std::cout << "sz %= 7:  " << sz << std::endl;
+
+    std::cout << "\nIncrement and Decrement:" << std::endl;
+    int256 signed_counter {-3};
+    std::cout << "signed_counter = " << signed_counter << std::endl;
+    std::cout << "++signed_counter = " << ++signed_counter << std::endl;
+    std::cout << "signed_counter++ = " << signed_counter++ << std::endl;
+    std::cout << "signed_counter = " << signed_counter << std::endl;
+    std::cout << "--signed_counter = " << --signed_counter << std::endl;
+
     return 0;
 }

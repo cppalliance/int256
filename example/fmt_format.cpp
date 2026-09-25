@@ -108,6 +108,40 @@ int main()
     std::cout << fmt::format("Hex with prefix, uppercase, padded: {:#070X}", wide_value) << std::endl;
     std::cout << fmt::format("Decimal with plus, padded: {:+080}", wide_value) << std::endl;
 
+    std::cout << "\n=== int256 Formatting ===" << std::endl;
+
+    using boost::int256::int256;
+
+    constexpr int256 signed_value {-123456789012345678LL};
+    std::cout << fmt::format("Signed value: {}", signed_value) << std::endl;
+
+    constexpr int256 positive {42};
+    constexpr int256 negative {-42};
+
+    std::cout << fmt::format("Plus sign:  {:+} and {:+}", positive, negative) << std::endl;
+    std::cout << fmt::format("Minus only: {} and {}", positive, negative) << std::endl;
+    std::cout << fmt::format("Space sign: {: } and {: }", positive, negative) << std::endl;
+
+    std::cout << "\n=== Sign-Magnitude in Every Base ===" << std::endl;
+
+    // The sign always comes before the base prefix and any zero padding, so
+    // '-0xff' and '-00000042', never '0x-ff'
+    std::cout << fmt::format("Negative hex with prefix: {:#x}", int256{-255}) << std::endl;
+    std::cout << fmt::format("Negative, zero-padded:    {:09}", int256{-42}) << std::endl;
+
+    std::cout << "\n=== Alignment with Sign ===" << std::endl;
+
+    std::cout << fmt::format("Right align +:  '{:>+10}'", positive) << std::endl;
+    std::cout << fmt::format("Left align +:   '{:<+10}'", positive) << std::endl;
+    std::cout << fmt::format("Center align +: '{:^+11}'", positive) << std::endl;
+    std::cout << fmt::format("Right align -:  '{:*>10}'", negative) << std::endl;
+
+    std::cout << "\n=== Large Signed Values ===" << std::endl;
+
+    constexpr auto min_value {(std::numeric_limits<int256>::min)()};
+    std::cout << fmt::format("int256 min:       {}", min_value) << std::endl;
+    std::cout << fmt::format("int256 min (hex): {:#x}", min_value) << std::endl;
+
     return 0;
 }
 // tag::exclude[]

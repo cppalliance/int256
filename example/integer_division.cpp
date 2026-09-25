@@ -105,5 +105,53 @@ int main()
                   << ", ties_away_zero = " << boost::int256::div_ties_away_zero(sample, scale) << std::endl;
     }
 
+    std::cout << "\n=== Every rounding mode on -12 / 5, with int256 ===" << std::endl;
+
+    using boost::int256::int256;
+
+    // The exact quotient is -2.4, so the nearest integer is -2 and no mode ties.
+    // Unlike uint256 above, every mode can now disagree with every other.
+    constexpr int256 sx {-12};
+    constexpr int256 sy {5};
+
+    std::cout << "div_to_zero          = " << boost::int256::div_to_zero(sx, sy) << std::endl;
+    std::cout << "div_away_zero        = " << boost::int256::div_away_zero(sx, sy) << std::endl;
+    std::cout << "div_to_pos_inf       = " << boost::int256::div_to_pos_inf(sx, sy) << std::endl;
+    std::cout << "div_to_neg_inf       = " << boost::int256::div_to_neg_inf(sx, sy) << std::endl;
+    std::cout << "div_euclid           = " << boost::int256::div_euclid(sx, sy) << std::endl;
+    std::cout << "div_ties_to_zero     = " << boost::int256::div_ties_to_zero(sx, sy) << std::endl;
+
+    constexpr auto s_floored {boost::int256::div_rem_to_neg_inf(sx, sy)};
+    std::cout << "\ndiv_rem_to_neg_inf(-12, 5): quotient = " << s_floored.quotient
+              << ", remainder = " << s_floored.remainder << std::endl;
+
+    constexpr auto s_truncated {boost::int256::div_rem_to_zero(sx, sy)};
+    std::cout << "div_rem_to_zero(-12, 5):    quotient = " << s_truncated.quotient
+              << ", remainder = " << s_truncated.remainder << std::endl;
+
+    std::cout << "quotient * y + remainder = " << (s_floored.quotient * sy + s_floored.remainder) << std::endl;
+
+    std::cout << "\n=== Euclidean remainder is never negative ===" << std::endl;
+
+    // operator% takes its sign from the dividend, which makes it a poor fit for
+    // wrapping an offset into a range. rem_euclid always lands in [0, abs(y)).
+    constexpr int256 modulus {7};
+    for (int256 offset {-9}; offset <= -6; ++offset)
+    {
+        std::cout << offset << " % 7 = " << (offset % modulus)
+                  << ", rem_euclid(" << offset << ", 7) = " << boost::int256::rem_euclid(offset, modulus) << std::endl;
+    }
+
+    std::cout << "\n=== MIN / -1, the one signed overflow this library defines ===" << std::endl;
+
+    // The paper's other division rules are unaffected: only the truncating
+    // quotient overflows here, and this library wraps it back to MIN rather
+    // than leaving it undefined, matching every other overflowing signed op.
+    constexpr auto min_value {(std::numeric_limits<int256>::min)()};
+    std::cout << "div_to_zero(MIN, -1)      = " << boost::int256::div_to_zero(min_value, int256{-1}) << std::endl;
+    std::cout << "div_rem_to_zero(MIN, -1)  = quotient "
+              << boost::int256::div_rem_to_zero(min_value, int256{-1}).quotient
+              << ", remainder " << boost::int256::div_rem_to_zero(min_value, int256{-1}).remainder << std::endl;
+
     return 0;
 }

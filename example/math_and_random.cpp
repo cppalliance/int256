@@ -89,5 +89,28 @@ int main()
     std::cout << "Smallest draw has a nonzero top word: " << (minimum.words[3] != 0U) << std::endl;
     std::cout << "Largest draw is above 2^255:          " << (maximum > (uint256{1U} << 255U)) << std::endl;
 
+    std::cout << "\n=== Random int256 values ===" << std::endl;
+
+    using boost::int256::int256;
+
+    // random.hpp's traits mark int256 as signed too, so Boost.Random's
+    // uniform_int_distribution draws from the full [MIN, MAX] range
+    boost::random::uniform_int_distribution<int256> signed_dist {
+        (std::numeric_limits<int256>::min)(), (std::numeric_limits<int256>::max)()};
+
+    std::cout << "Three signed draws over the whole range:" << std::endl;
+    for (int i {0}; i < 3; ++i)
+    {
+        std::cout << "  " << signed_dist(rng) << std::endl;
+    }
+
+    // A narrow range that straddles zero is just as well defined
+    boost::random::uniform_int_distribution<int256> narrow_signed {int256{-1000}, int256{1000}};
+    std::cout << "\nThree draws from [-1000, 1000]:" << std::endl;
+    for (int i {0}; i < 3; ++i)
+    {
+        std::cout << "  " << narrow_signed(rng) << std::endl;
+    }
+
     return 0;
 }

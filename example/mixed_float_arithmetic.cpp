@@ -5,6 +5,7 @@
 #include <boost/int256.hpp>
 #include <iomanip>
 #include <iostream>
+#include <limits>
 
 int main()
 {
@@ -77,6 +78,30 @@ int main()
     std::cout << "2^200 + 1 == double(2^200) = "
               << (two_200_plus_one == 1.6069380442589903e60) << std::endl;
     std::cout << "2^200 + 1 == 2^200 exactly = " << (two_200_plus_one == two_200) << std::endl;
+
+    std::cout << "\n=== Arithmetic with int256 ===" << std::endl;
+
+    using boost::int256::int256;
+
+    constexpr int256 signed_value {-5};
+
+    std::cout << "signed_value       = " << signed_value << std::endl;
+    std::cout << "signed_value * 1.5 = " << (signed_value * 1.5) << std::endl;
+    std::cout << "2.0 + signed_value = " << (2.0 + signed_value) << std::endl;
+
+    std::cout << "\n=== Comparisons with int256 ===" << std::endl;
+
+    std::cout << "signed_value < 0.0 = " << (signed_value < 0.0) << std::endl;
+
+    std::cout << "\n=== Conversions to floating point with int256 ===" << std::endl;
+
+    // The conversion is symmetric: converting f and -f (for a finite, non-zero
+    // f) gives values that are exact negatives of each other, and it goes
+    // through the same magnitude-then-sign path as the constructor.
+    constexpr auto min_value {(std::numeric_limits<int256>::min)()};
+    std::cout << "double(MIN) = " << static_cast<double>(min_value) << std::endl;
+    std::cout << "double(MAX) = " << static_cast<double>((std::numeric_limits<int256>::max)()) << std::endl;
+    std::cout << "double(-2^200) = " << static_cast<double>(-(int256{1} << 200)) << std::endl;
 
     return 0;
 }

@@ -97,5 +97,36 @@ int main()
     std::cout << "\"0x10\" in base 16: value " << stopped << ", stopped at '" << *partial.ptr << "'"
               << std::endl;
 
+    std::cout << "\n=== to_chars and from_chars with int256 ===" << std::endl;
+
+    using boost::int256::int256;
+
+    constexpr int256 min_i256 {(std::numeric_limits<int256>::min)()};
+    result = boost::charconv::to_chars(buffer, buffer + sizeof(buffer), min_i256);
+    *result.ptr = '\0';
+    std::cout << "int256 min (decimal): " << buffer << std::endl;
+
+    // Sign-magnitude in every base: the '-' comes before any digits, and there
+    // is no base prefix from to_chars itself (that is an iostream/format
+    // feature), so the sign is simply the first character.
+    result = boost::charconv::to_chars(buffer, buffer + sizeof(buffer), int256{-255}, 16);
+    *result.ptr = '\0';
+    std::cout << "int256 -255 (hex): " << buffer << std::endl;
+
+    const char* negative_str {"-57896044618658097711785492504343953926634992332820282019728792003956564819968"};
+    int256 parsed_signed {};
+    boost::charconv::from_chars(negative_str, negative_str + std::strlen(negative_str), parsed_signed);
+    std::cout << "\nParsed \"" << negative_str << "\"" << std::endl;
+    std::cout << "  Result: " << parsed_signed << std::endl;
+    std::cout << "  Equals min? " << (parsed_signed == min_i256) << std::endl;
+
+    // A leading '+' is rejected, matching from_chars for the built-in types
+    const char* plus_str {"+1"};
+    int256 rejected {};
+    const auto plus_result {boost::charconv::from_chars(plus_str, plus_str + std::strlen(plus_str), rejected)};
+    std::cout << "\"+1\" parses: " << static_cast<bool>(plus_result)
+              << " (ec == invalid_argument: " << (plus_result.ec == std::errc::invalid_argument) << ")"
+              << std::endl;
+
     return 0;
 }

@@ -11,6 +11,7 @@
 #include <boost/int256/int256.hpp>
 #include <boost/int256/hash.hpp>
 #include <boost/int256/iostream.hpp>
+#include <boost/int256/limits.hpp>
 // tag::exclude[]
 // The Boost.ContainerHash and Boost.Unordered headers trip strict warnings the
 // test build enables (old-style casts, and a float-to-double promotion in
@@ -38,9 +39,11 @@
 #include <cstddef>
 #include <functional>
 #include <iostream>
+#include <limits>
 #include <string>
 
 using boost::int256::uint256;
+using boost::int256::int256;
 
 // A user-defined composite key that holds 256-bit fields. Providing a hash_value
 // overload in the type's own namespace lets Boost.ContainerHash find it via ADL,
@@ -134,6 +137,33 @@ int main()
 
     std::cout << "Lookup by digest: " << by_digest[digest] << std::endl;
     std::cout << "Digest as an integer: " << digest << std::endl;
+
+    std::cout << "\n=== boost::hash on int256 ===" << std::endl;
+
+    // int256's hash_value follows the same algorithm as uint256's, over the
+    // same four words, so boost::hash<int256> agrees with std::hash<int256>
+    // the same way.
+    const int256 neg {-123456789012345678LL};
+
+    std::cout << "boost::hash matches std::hash (int256): "
+              << (boost::hash<int256>{}(neg) == std::hash<int256>{}(neg)) << std::endl;
+
+    // A value and its negation differ in every word once the sign bit is
+    // sign-extended, so they hash differently
+    std::cout << "hash(v) != hash(-v): "
+              << (boost::hash<int256>{}(neg) != boost::hash<int256>{}(-neg)) << std::endl;
+
+    std::cout << "\n=== boost::unordered_flat_map<int256, ...> ===" << std::endl;
+
+    boost::unordered_flat_map<int256, int> signed_counts {};
+    signed_counts[int256{-1}] = 1;
+    signed_counts[int256{0}] = 2;
+    signed_counts[int256{1}] = 3;
+    signed_counts[(std::numeric_limits<int256>::min)()] = 4;
+
+    std::cout << "Flat map size: " << signed_counts.size() << std::endl;
+    std::cout << "counts[-1] = " << signed_counts[int256{-1}] << std::endl;
+    std::cout << "counts[min] = " << signed_counts[(std::numeric_limits<int256>::min)()] << std::endl;
 
     return 0;
 }

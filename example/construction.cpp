@@ -6,6 +6,7 @@
 #include <boost/int256/literals.hpp>
 #include <boost/int256/iostream.hpp>
 #include <boost/int256/limits.hpp>
+#include <boost/int256/climits.hpp>
 #include <iostream>
 #include <limits>
 #include <sstream>
@@ -51,15 +52,71 @@ int main()
     ss >> from_stream;
     std::cout << "From stringstream: " << from_stream << std::endl;
 
+    std::cout << "\n=== int256 Construction ===" << std::endl;
+
+    using boost::int256::int256;
+
+    // Signed from a builtin integer type
+    constexpr int256 signed_builtin {-42};
+    std::cout << "From builtin (-42): " << signed_builtin << std::endl;
+
+    // Signed from the four words, most significant first. The top word is
+    // signed, so int256{-1, 0, 0, 0} works; read the sign back with signed_high().
+    constexpr int256 min_value {INT64_MIN, UINT64_C(0), UINT64_C(0), UINT64_C(0)};
+    std::cout << "From words (INT64_MIN, 0, 0, 0): " << min_value << std::endl;
+    std::cout << "  Equals numeric_limits min? " << std::boolalpha
+              << (min_value == (std::numeric_limits<int256>::min)()) << std::endl;
+    std::cout << "  signed_high(): " << min_value.signed_high() << std::endl;
+
+    // Signed literals. Values that fit in unsigned long long can be written
+    // directly; the leading minus is parsed as a unary operator on the
+    // literal result (lowercase and uppercase suffixes both work):
+    const auto negative_literal {-12345_i256};
+    std::cout << "From literal -12345_i256: " << negative_literal << std::endl;
+
+    const auto positive_literal {12345_I256};
+    std::cout << "From literal 12345_I256: " << positive_literal << std::endl;
+
+    // For magnitudes beyond unsigned long long, use a string literal or the macro
+    const auto large_signed_string {"-99999999999999999999"_i256};
+    std::cout << "From string literal: " << large_signed_string << std::endl;
+
+    const auto from_signed_macro {BOOST_INT256_INT256_C(-99999999999999999999)};
+    std::cout << "From BOOST_INT256_INT256_C(-99999999999999999999): " << from_signed_macro << std::endl;
+
+    // A raw (unquoted) literal never sees a leading '-': -X_i256 is unary
+    // minus applied to X_i256, so X itself must be at most MAX in every
+    // base. The minimum value's magnitude, 2^255, is one more than MAX, so
+    // -57896...968_i256 and -0x8000...0_i256 (unquoted) are BOTH ill-formed,
+    // the same way -9223372036854775808LL is for a built-in long long.
+    // A quoted string literal embeds the sign in the digit sequence instead,
+    // so it (and the macro, which stringifies its whole argument including
+    // the sign) can reach MIN directly:
+    const auto min_from_hex {"-0x8000000000000000000000000000000000000000000000000000000000000000"_i256};
+    std::cout << "From hex string literal (-0x8, 63 zeros): " << min_from_hex << std::endl;
+    std::cout << "  Equals numeric_limits min? " << std::boolalpha
+              << (min_from_hex == (std::numeric_limits<int256>::min)()) << std::endl;
+
+    // BOOST_INT256_INT256_MIN and BOOST_INT256_INT256_MAX are the simplest
+    // way to spell the extremes and never risk this trap
+    std::cout << "BOOST_INT256_INT256_MIN: " << BOOST_INT256_INT256_MIN << std::endl;
+    std::cout << "BOOST_INT256_INT256_MAX: " << BOOST_INT256_INT256_MAX << std::endl;
+    std::cout << "  MIN equals numeric_limits min? "
+              << (BOOST_INT256_INT256_MIN == (std::numeric_limits<int256>::min)()) << std::endl;
+
     std::cout << "\n=== Default and Copy Construction ===" << std::endl;
 
     // Default construction (zero-initialized)
     constexpr uint256 default_constructed {};
-    std::cout << "Default constructed: " << default_constructed << std::endl;
+    constexpr int256 signed_default_constructed {};
+    std::cout << "Default constructed (uint256): " << default_constructed << std::endl;
+    std::cout << "Default constructed (int256): " << signed_default_constructed << std::endl;
 
     // Copy construction
     const uint256 copied {from_macro};
-    std::cout << "Copy constructed: " << copied << std::endl;
+    const int256 signed_copied {from_signed_macro};
+    std::cout << "Copy constructed (uint256): " << copied << std::endl;
+    std::cout << "Copy constructed (int256): " << signed_copied << std::endl;
 
     std::cout << "\n=== Floating-Point Construction ===" << std::endl;
 
@@ -68,6 +125,9 @@ int main()
     constexpr uint256 from_double {12345.9};
     std::cout << "uint256 from 12345.9 (truncated): " << from_double << std::endl;
 
+    constexpr int256 from_negative_double {-12345.9};
+    std::cout << "int256 from -12345.9 (truncated toward zero): " << from_negative_double << std::endl;
+
     // Values that exceed the 64-bit range are routed through the full 256-bit decomposition.
     const double two_to_the_200 {1.6069380442589903e60};  // 2^200
     const uint256 large_from_double {two_to_the_200};
@@ -75,12 +135,14 @@ int main()
 
     std::cout << "\n=== Floating-Point Edge Cases ===" << std::endl;
 
-    // NaN yields zero, which mirrors libgcc's __fixunsdfti.
+    // NaN yields zero for both types (mirrors libgcc's __fix(uns)Xfti).
     const double nan_value {std::numeric_limits<double>::quiet_NaN()};
     const uint256 unsigned_from_nan {nan_value};
+    const int256 signed_from_nan {nan_value};
     std::cout << "uint256 from NaN: " << unsigned_from_nan << std::endl;
+    std::cout << "int256 from NaN: " << signed_from_nan << std::endl;
 
-    // Negative values are clamped to zero.
+    // Negative values are clamped to zero when constructing uint256.
     const uint256 unsigned_from_negative {-1.0};
     std::cout << "uint256 from -1.0 (clamped to zero): " << unsigned_from_negative << std::endl;
 
@@ -92,6 +154,13 @@ int main()
     const double huge {1e80};  // Well beyond 2^256 (about 1.16e77)
     const uint256 saturated_from_huge {huge};
     std::cout << "uint256 from 1e80 (saturates): " << saturated_from_huge << std::endl;
+
+    // For int256, values >= 2^255 saturate to INT256_MAX and values <= -2^255
+    // saturate to INT256_MIN. 1e80 is well beyond 2^255 (~5.79e76) in magnitude.
+    const int256 saturated_positive {huge};
+    const int256 saturated_negative {-huge};
+    std::cout << "int256 from 1e80 (saturates to max): " << saturated_positive << std::endl;
+    std::cout << "int256 from -1e80 (saturates to min): " << saturated_negative << std::endl;
 
     return 0;
 }

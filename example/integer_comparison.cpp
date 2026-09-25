@@ -19,6 +19,7 @@
 int main()
 {
     using boost::int256::uint256;
+    using boost::int256::int256;
     using boost::int256::cmp_equal;
     using boost::int256::cmp_less;
     using boost::int256::in_range;
@@ -70,6 +71,34 @@ int main()
             std::cout << candidate << " does not fit in a std::uint64_t" << std::endl;
         }
     }
+
+    std::cout << "\n=== int256 against a builtin integer is always exact ===" << std::endl;
+
+    // Every built-in integer, including unsigned __int128, fits inside the
+    // range of int256, so there is no mixed sign trap the way there is
+    // against uint256 below: the operator and cmp_less always agree.
+    constexpr int256 signed_min {(std::numeric_limits<int256>::min)()};
+    std::cout << "signed_min < -1 (operator):  " << (signed_min < -1) << std::endl;
+    std::cout << "cmp_less(signed_min, -1):    " << cmp_less(signed_min, -1) << std::endl;
+
+    std::cout << "\n=== int256 against uint256 has the same trap as unsigned ===" << std::endl;
+
+    // int256 and uint256 follow the usual arithmetic conversions: both become
+    // uint256, so a negative int256 becomes huge before the comparison, just
+    // like a negative builtin does against a uint256 above.
+    std::cout << "int256{-1} < uint256{1} (operator): " << (int256{-1} < uint256{1U}) << std::endl;
+    std::cout << "cmp_less(int256{-1}, uint256{1}):   " << cmp_less(int256{-1}, uint256{1U}) << std::endl;
+
+    std::cout << "\n=== in_range with int256 ===" << std::endl;
+
+    // in_range<int256> from a uint256 tests against int256's positive range
+    std::cout << "in_range<int256>(uint256 max):         " << in_range<int256>(max_value) << std::endl;
+    std::cout << "in_range<int256>(uint256{200}):        " << in_range<int256>(uint256{200U}) << std::endl;
+
+    // in_range<uint256> from a negative int256 is always false
+    std::cout << "in_range<uint256>(int256{-1}):         " << in_range<uint256>(int256{-1}) << std::endl;
+    std::cout << "in_range<std::int8_t>(int256{200}):    " << in_range<std::int8_t>(int256{200}) << std::endl;
+    std::cout << "in_range<std::uint8_t>(int256{-1}):    " << in_range<std::uint8_t>(int256{-1}) << std::endl;
 
     return 0;
 }

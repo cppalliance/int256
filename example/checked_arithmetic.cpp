@@ -19,6 +19,7 @@
 int main()
 {
     using boost::int256::uint256;
+    using boost::int256::int256;
     using boost::int256::ckd_add;
     using boost::int256::ckd_sub;
     using boost::int256::ckd_mul;
@@ -82,6 +83,29 @@ int main()
     overflow = ckd_mul(&byte, std::uint8_t{20}, std::uint8_t{20});
     std::cout << "ckd_mul<uint8_t>(20, 20): overflow=" << overflow
               << ", wrapped=" << static_cast<int>(byte) << std::endl;
+
+    std::cout << "\n=== Checked Arithmetic with int256 ===" << std::endl;
+
+    constexpr auto int_max {(std::numeric_limits<int256>::max)()};
+    constexpr auto int_min {(std::numeric_limits<int256>::min)()};
+
+    int256 sr {};
+    overflow = ckd_add(&sr, int_max, int256{2});
+    std::cout << "ckd_add(INT256_MAX, 2): overflow=" << overflow << ", wrapped=" << sr << std::endl;
+
+    // Multiplication detects overflow that operator* would silently roll over,
+    // including MIN * -1, whose true result is not representable.
+    overflow = ckd_mul(&sr, int_max, int256{2});
+    std::cout << "ckd_mul(INT256_MAX, 2): overflow=" << overflow << ", wrapped=" << sr << std::endl;
+    overflow = ckd_mul(&sr, int_min, int256{-1});
+    std::cout << "ckd_mul(INT256_MIN, -1): overflow=" << overflow << ", wrapped=" << sr << std::endl;
+
+    // The result type and the two operand types are independent, and may
+    // differ in signedness; the exact mathematical value is always used.
+    std::int64_t narrow_signed {};
+    overflow = ckd_add(&narrow_signed, uint256{5U}, int256{-3});
+    std::cout << "ckd_add<int64_t>(uint256{5}, int256{-3}): overflow=" << overflow
+              << ", result=" << narrow_signed << std::endl;
 
     return 0;
 }
