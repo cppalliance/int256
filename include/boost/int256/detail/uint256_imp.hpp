@@ -42,6 +42,9 @@ BOOST_INT256_EXPORT struct uint256
     constexpr uint256& operator=(const uint256&) noexcept = default;
     constexpr uint256& operator=(uint256&&) noexcept = default;
 
+    // Bit copy, defined in detail/conversions.hpp once both types are complete
+    BOOST_INT256_HOST_DEVICE constexpr uint256(const int256& v) noexcept;
+
     // Most significant word first, matching the (high, low) idiom of Boost.Int128
     BOOST_INT256_HOST_DEVICE constexpr uint256(const std::uint64_t w3, const std::uint64_t w2,
                                                const std::uint64_t w1, const std::uint64_t w0) noexcept :
@@ -62,7 +65,26 @@ BOOST_INT256_EXPORT struct uint256
 
     // Every shift of a builtin 128-bit value takes an exactly typed right operand. On MSVC
     // builtin_u128 is the class std::_Unsigned128, so with the converting constructor below in
-    // scope `builtin_u128 >> int` is ambiguous between std::operator>> and this type's operators
+    // scope `builtin_u128 >> int` is ambiguous between std::operator>> and this type's operators.
+    // The shift and the v < 0 sign test are both routed through the isolated-namespace helpers
+    // (see config.hpp) on MSVC, once uint256 also has an exact match operator<</operator>> for
+    // (uint256, builtin128): a plain infix here would then also be ambiguous (finding F12)
+    #ifdef BOOST_INT256_HAS_MSVC_INT128
+
+    BOOST_INT256_HOST_DEVICE BOOST_INT256_BUILTIN_CONSTEXPR uint256(const detail::builtin_i128 v) noexcept :
+        words {static_cast<std::uint64_t>(v),
+               static_cast<std::uint64_t>(boost::int256_detail::builtin128_shr_u(static_cast<detail::builtin_u128>(v), 64)),
+               v < static_cast<detail::builtin_i128>(0) ? UINT64_MAX : UINT64_C(0),
+               v < static_cast<detail::builtin_i128>(0) ? UINT64_MAX : UINT64_C(0)} {}
+
+    BOOST_INT256_HOST_DEVICE BOOST_INT256_BUILTIN_CONSTEXPR uint256(const detail::builtin_u128 v) noexcept :
+        words {static_cast<std::uint64_t>(v),
+               static_cast<std::uint64_t>(boost::int256_detail::builtin128_shr_u(v, 64)),
+               UINT64_C(0),
+               UINT64_C(0)} {}
+
+    #else
+
     BOOST_INT256_HOST_DEVICE BOOST_INT256_BUILTIN_CONSTEXPR uint256(const detail::builtin_i128 v) noexcept :
         words {static_cast<std::uint64_t>(v),
                static_cast<std::uint64_t>(static_cast<detail::builtin_u128>(v) >> static_cast<detail::builtin_u128>(64)),
@@ -74,6 +96,8 @@ BOOST_INT256_EXPORT struct uint256
                static_cast<std::uint64_t>(v >> static_cast<detail::builtin_u128>(64)),
                UINT64_C(0),
                UINT64_C(0)} {}
+
+    #endif // BOOST_INT256_HAS_MSVC_INT128
 
     #endif // BOOST_INT256_HAS_INT128
 
@@ -136,6 +160,18 @@ BOOST_INT256_EXPORT struct uint256
     // long doubles do not exist on the CUDA or SYCL (spir64) device
     #if !defined(BOOST_INT256_HAS_GPU_SUPPORT)
     constexpr operator long double() const noexcept;
+    #endif
+
+    // C++23 <stdfloat> extended types (std::float16_t, float32_t, float64_t, float128_t,
+    // bfloat16_t). is_extended_floating_point_v excludes whichever of these turn out to
+    // be a plain alias for float/double/long double on the current platform, so this
+    // never redeclares one of the three operators above
+    #if !defined(BOOST_INT256_HAS_GPU_SUPPORT) && defined(BOOST_INT256_HAS_STDFLOAT)
+    template <typename ExtFloat, std::enable_if_t<detail::is_extended_floating_point_v<ExtFloat>, bool> = true>
+    BOOST_INT256_HOST_DEVICE constexpr operator ExtFloat() const noexcept
+    {
+        return detail::unsigned_words_to_float<ExtFloat>(words);
+    }
     #endif
 
     // Compound OR
@@ -455,9 +491,26 @@ constexpr uint256::operator long double() const noexcept
 // The inverse of operator(Float). Scaling down by 2^64 is exact, and the loop only divides
 // while the value is at least 2^64, so no intermediate ever underflows and neither 2^128
 // nor 2^192 is ever materialized as a Float
+#ifdef _MSC_VER
+#  pragma warning(push)
+#  pragma warning(disable : 4127) // Conditional expression is constant pre-C++17
+#endif
+
 template <BOOST_INT256_FLOATING_POINT_CONCEPT>
 BOOST_INT256_HOST_DEVICE constexpr uint256::uint256(Float f) noexcept
 {
+    // A type this narrow (std::float16_t, max_exponent 16) cannot hold the ladder's
+    // 2^32/2^64 scale constants below: converting an out of range value into a
+    // floating-point type is undefined behavior and not a constant expression. Every
+    // value of such a type is exactly representable in float, so widening first and
+    // reusing the float constructor is exact and loses nothing. bfloat16_t shares
+    // float's exponent range, so it is not narrow by this test and needs no widening
+    BOOST_INT256_IF_CONSTEXPR (std::numeric_limits<Float>::max_exponent < 128)
+    {
+        *this = uint256(static_cast<float>(f));
+        return;
+    }
+
     constexpr Float two_32 {static_cast<Float>(UINT64_C(1) << 32U)};
     constexpr Float two_64 {two_32 * two_32};
 
@@ -495,6 +548,10 @@ BOOST_INT256_HOST_DEVICE constexpr uint256::uint256(Float f) noexcept
         scaled = (scaled - static_cast<Float>(word)) * two_64;
     }
 }
+
+#ifdef _MSC_VER
+#  pragma warning(pop)
+#endif
 
 //=====================================
 // Unary Operators
@@ -1173,13 +1230,44 @@ BOOST_INT256_EXPORT BOOST_INT256_HOST_DEVICE constexpr uint256 operator<<(const 
 
 BOOST_INT256_EXPORT BOOST_INT256_HOST_DEVICE BOOST_INT256_BUILTIN_CONSTEXPR detail::builtin_u128 operator<<(const detail::builtin_u128 lhs, const uint256& rhs) noexcept
 {
+    // On MSVC this is routed through the isolated-namespace helper (see config.hpp)
+    // rather than a plain infix <<, to avoid an ambiguity with this library's own
+    // operator<< (Boost.Int256 finding F12)
+    #ifdef BOOST_INT256_HAS_MSVC_INT128
+    return boost::int256_detail::builtin128_shl_u(lhs, rhs.words[0]);
+    #else
     return lhs << static_cast<detail::builtin_u128>(rhs.words[0]);
+    #endif
 }
 
 BOOST_INT256_EXPORT BOOST_INT256_HOST_DEVICE BOOST_INT256_BUILTIN_CONSTEXPR detail::builtin_i128 operator<<(const detail::builtin_i128 lhs, const uint256& rhs) noexcept
 {
+    #ifdef BOOST_INT256_HAS_MSVC_INT128
+    return static_cast<detail::builtin_i128>(boost::int256_detail::builtin128_shl_u(static_cast<detail::builtin_u128>(lhs), rhs.words[0]));
+    #else
     return lhs << static_cast<detail::builtin_u128>(rhs.words[0]);
+    #endif
 }
+
+// The count flavor (library type on the left, MSVC's builtin 128-bit type on the
+// right) has no exact match otherwise: std::_Unsigned128/_Signed128's own hidden
+// friend operator<< and uint256's operator<<(uint256, uint256) both need one
+// user-defined conversion, on different arguments, so MSVC ties them (finding F12).
+// is_any_integer_v does not cover MSVC's distinct _Unsigned128/_Signed128 class
+// types, unlike native __int128, so the generic template below never applies to them
+#ifdef BOOST_INT256_HAS_MSVC_INT128
+
+BOOST_INT256_EXPORT BOOST_INT256_HOST_DEVICE BOOST_INT256_BUILTIN_CONSTEXPR uint256 operator<<(const uint256& lhs, const detail::builtin_u128 rhs) noexcept
+{
+    return lhs << static_cast<std::uint64_t>(rhs);
+}
+
+BOOST_INT256_EXPORT BOOST_INT256_HOST_DEVICE BOOST_INT256_BUILTIN_CONSTEXPR uint256 operator<<(const uint256& lhs, const detail::builtin_i128 rhs) noexcept
+{
+    return lhs << static_cast<std::uint64_t>(rhs);
+}
+
+#endif // BOOST_INT256_HAS_MSVC_INT128
 
 #endif
 
@@ -1235,13 +1323,41 @@ BOOST_INT256_EXPORT BOOST_INT256_HOST_DEVICE constexpr uint256 operator>>(const 
 
 BOOST_INT256_EXPORT BOOST_INT256_HOST_DEVICE BOOST_INT256_BUILTIN_CONSTEXPR detail::builtin_u128 operator>>(const detail::builtin_u128 lhs, const uint256& rhs) noexcept
 {
+    // On MSVC this is routed through the isolated-namespace helper (see config.hpp)
+    // rather than a plain infix >>, to avoid an ambiguity with this library's own
+    // operator>> (Boost.Int256 finding F12)
+    #ifdef BOOST_INT256_HAS_MSVC_INT128
+    return boost::int256_detail::builtin128_shr_u(lhs, rhs.words[0]);
+    #else
     return lhs >> static_cast<detail::builtin_u128>(rhs.words[0]);
+    #endif
 }
 
 BOOST_INT256_EXPORT BOOST_INT256_HOST_DEVICE BOOST_INT256_BUILTIN_CONSTEXPR detail::builtin_i128 operator>>(const detail::builtin_i128 lhs, const uint256& rhs) noexcept
 {
+    // lhs stays signed (an arithmetic shift), only the count is unsigned
+    #ifdef BOOST_INT256_HAS_MSVC_INT128
+    return boost::int256_detail::builtin128_shr_i(lhs, rhs.words[0]);
+    #else
     return lhs >> static_cast<detail::builtin_u128>(rhs.words[0]);
+    #endif
 }
+
+// See the note above the analogous operator<< overloads: MSVC's distinct
+// _Unsigned128/_Signed128 need this dedicated exact match too (finding F12)
+#ifdef BOOST_INT256_HAS_MSVC_INT128
+
+BOOST_INT256_EXPORT BOOST_INT256_HOST_DEVICE BOOST_INT256_BUILTIN_CONSTEXPR uint256 operator>>(const uint256& lhs, const detail::builtin_u128 rhs) noexcept
+{
+    return lhs >> static_cast<std::uint64_t>(rhs);
+}
+
+BOOST_INT256_EXPORT BOOST_INT256_HOST_DEVICE BOOST_INT256_BUILTIN_CONSTEXPR uint256 operator>>(const uint256& lhs, const detail::builtin_i128 rhs) noexcept
+{
+    return lhs >> static_cast<std::uint64_t>(rhs);
+}
+
+#endif // BOOST_INT256_HAS_MSVC_INT128
 
 #endif
 
