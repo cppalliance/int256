@@ -2,11 +2,15 @@
 # Distributed under the Boost Software License, Version 1.0.
 # https://www.boost.org/LICENSE_1_0.txt
 #
-# Struct definition:
+# Struct definitions:
 #   struct uint256 { std::uint64_t words[4]; };
+#   struct int256  { std::uint64_t words[4]; };
 #
 # words[0] is the least significant word on every platform, including big
-# endian ones, so the value is words[3] * 2^192 + ... + words[0].
+# endian ones, so the unsigned value is words[3] * 2^192 + ... + words[0].
+# int256 reads that same unsigned value as two's complement: it is negative
+# when bit 63 of words[3] is set, in which case the true value is the
+# unsigned value minus 2^256.
 #
 # Usage: source int256_printer_gdb.py
 
@@ -43,6 +47,37 @@ class Uint256Printer:
         return None
 
 
+class Int256Printer:
+    """Pretty printer for the int256 type"""
+
+    def __init__(self, val):
+        self.val = val
+
+    def to_string(self):
+        try:
+            words = self.val["words"]
+            # Every word is std::uint64_t, so read all four unsigned and fold
+            # the two's complement sign in by hand rather than casting.
+            value = 0
+            for i in range(4):
+                value |= (int(words[i]) & MASK64) << (64 * i)
+
+            if value >= (1 << 255):
+                value -= (1 << 256)
+
+            return f"{value:,}"
+        except Exception as e:
+            return f"<invalid int256: {e}>"
+
+    def children(self):
+        words = self.val["words"]
+        for i in range(4):
+            yield f"words[{i}]", words[i]
+
+    def display_hint(self):
+        return None
+
+
 def lookup_int256_type(val):
     """
     Lookup function to detect if a type should use our pretty printers.
@@ -62,13 +97,18 @@ def lookup_int256_type(val):
 
     type_name = str(type_obj)
 
-    # Pattern to match the uint256 type
+    # Patterns to match the uint256 and int256 types
     uint256_pattern = re.compile(
         r"^(boost::int256::uint256|(\w+::)*uint256|uint256)$"
+    )
+    int256_pattern = re.compile(
+        r"^(boost::int256::int256|(\w+::)*int256|int256)$"
     )
 
     if uint256_pattern.match(type_name):
         return Uint256Printer(val)
+    if int256_pattern.match(type_name):
+        return Int256Printer(val)
 
     return None
 
@@ -83,4 +123,4 @@ def register_int256_printers(objfile=None):
 
 # Auto-register when the script is sourced
 register_int256_printers()
-print("uint256 pretty printer loaded successfully")
+print("uint256 and int256 pretty printers loaded successfully")
