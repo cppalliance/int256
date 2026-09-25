@@ -77,7 +77,18 @@ jobs:
                   return 4;
               }
 
-              std::cout << "Single header smoke test passed: " << a << std::endl;
+              const auto s {-12345_i256};
+              if (s + s != -24690_i256)
+              {
+                  return 5;
+              }
+
+              if (BOOST_INT256_INT256_MIN / -1_i256 != BOOST_INT256_INT256_MIN)
+              {
+                  return 6;
+              }
+
+              std::cout << "Single header smoke test passed: " << a << " " << s << std::endl;
               return 0;
           }
           EOF
