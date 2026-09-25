@@ -30,12 +30,21 @@ import boost.int256;
 using boost::int256::uint256;
 using boost::int256::midpoint;
 
+#if defined(BOOST_INT256_TEST_HAS_SIGNED)
+using boost::int256::int256;
+#endif
+
 namespace
 {
 
 std::mt19937_64 rng {42};
 
 constexpr uint256 one {UINT64_C(0), UINT64_C(0), UINT64_C(0), UINT64_C(1)};
+
+#if defined(BOOST_INT256_TEST_HAS_SIGNED)
+constexpr int256 min_i {INT64_MIN, UINT64_C(0), UINT64_C(0), UINT64_C(0)};
+constexpr int256 max_i {INT64_MAX, UINT64_MAX, UINT64_MAX, UINT64_MAX};
+#endif
 
 void check_midpoint(const uint256& a, const uint256& b)
 {
@@ -157,6 +166,141 @@ void test_constexpr()
     static_assert(midpoint(max, uint256{}) == (max / 2U) + 1U, "rounding towards the larger end");
 }
 
+#if defined(BOOST_INT256_TEST_HAS_SIGNED)
+
+//=====================================
+// int256: rounds towards the first argument, and the intermediate difference
+// (computed in the unsigned domain) never overflows even at MIN/MAX
+//=====================================
+
+void check_midpoint_i(const int256& a, const int256& b)
+{
+    const auto m {midpoint(a, b)};
+
+    const auto low {a < b ? a : b};
+    const auto high {a < b ? b : a};
+    BOOST_TEST(m >= low);
+    BOOST_TEST(m <= high);
+
+    #ifndef BOOST_INT256_ORACLE_UNAVAILABLE
+    // Every quantity below is computed in the wide signed domain, so nothing
+    // here can overflow the way a naive (a + b) / 2 would in int256 itself.
+    const smp sa {to_smp(a)};
+    const smp sb {to_smp(b)};
+    const smp sm {to_smp(m)};
+
+    const smp to_a {sm > sa ? sm - sa : sa - sm};
+    const smp to_b {sm > sb ? sm - sb : sb - sm};
+
+    BOOST_TEST(to_a <= to_b);
+    BOOST_TEST(to_b - to_a <= 1);
+
+    // Directly against the definition: a + (b - a) / 2, where division
+    // truncates towards zero, exactly like int division on a builtin type.
+    const smp expected {sa + (sb - sa) / 2};
+
+    BOOST_TEST(sm == expected ||
+               report_mismatch_i("midpoint", a, b, m, expected));
+    #endif
+}
+
+void test_known_answers_i()
+{
+    BOOST_TEST(midpoint(int256{0}, int256{10}) == int256{5});
+    BOOST_TEST(midpoint(int256{10}, int256{0}) == int256{5});
+    BOOST_TEST(midpoint(int256{0}, int256{-10}) == int256{-5});
+    BOOST_TEST(midpoint(int256{-10}, int256{0}) == int256{-5});
+    BOOST_TEST(midpoint(int256{0}, int256{9}) == int256{4});
+    BOOST_TEST(midpoint(int256{9}, int256{0}) == int256{5});
+    BOOST_TEST(midpoint(int256{0}, int256{-9}) == int256{-4});
+    BOOST_TEST(midpoint(int256{-9}, int256{0}) == int256{-5});
+    BOOST_TEST(midpoint(int256{-4}, int256{4}) == int256{0});
+    BOOST_TEST(midpoint(int256{-5}, int256{5}) == int256{0});
+    BOOST_TEST(midpoint(int256{5}, int256{-5}) == int256{0});
+    BOOST_TEST(midpoint(int256{-42}, int256{-42}) == int256{-42});
+}
+
+// The two extremes a naive average gets wrong: MIN + MAX overflows a plain
+// sum, and MIN - MIN or MAX - MAX as a naive (a + b) / 2 fares no better once
+// the intermediate sum itself is out of range.
+void test_extremes_i()
+{
+    BOOST_TEST(midpoint(min_i, min_i) == min_i);
+    BOOST_TEST(midpoint(max_i, max_i) == max_i);
+
+    // The true midpoint of MIN and MAX is -0.5; rounding towards MIN (the
+    // more negative of the two, and the first argument) rounds down to -1.
+    BOOST_TEST(midpoint(min_i, max_i) == int256{-1});
+    // Swapped: rounding towards MAX (the first argument here) rounds up to 0.
+    BOOST_TEST(midpoint(max_i, min_i) == int256{0});
+
+    // MIN's magnitude (2^255) is even, so there is no rounding ambiguity and
+    // both argument orders agree.
+    BOOST_TEST(midpoint(min_i, int256{0}) == min_i / 2);
+    BOOST_TEST(midpoint(int256{0}, min_i) == min_i / 2);
+
+    // MAX's magnitude (2^255 - 1) is odd, so the rounding direction matters.
+    BOOST_TEST(midpoint(max_i, int256{0}) == (max_i / 2) + 1);
+    BOOST_TEST(midpoint(int256{0}, max_i) == max_i / 2);
+
+    // Across every word boundary, both signs.
+    for (unsigned k {1}; k < 255U; ++k)
+    {
+        const int256 power {static_cast<int256>(one << k)};
+        check_midpoint_i(int256{}, power);
+        check_midpoint_i(power, power);
+        check_midpoint_i(-power, power);
+        check_midpoint_i(power, -power);
+        check_midpoint_i(power - 1, power);
+        check_midpoint_i(power, power - 1);
+    }
+}
+
+void test_corpus_and_random_i()
+{
+    for (const auto& a : signed_edge_values())
+    {
+        for (const auto& b : signed_edge_values())
+        {
+            check_midpoint_i(a, b);
+        }
+
+        if (boost::detail::test_errors() != 0)
+        {
+            return;
+        }
+    }
+
+    for (std::size_t i {0}; i < N; ++i)
+    {
+        const auto a {random_int256(rng, shape::word4, sign::mixed)};
+        const auto b {random_int256(rng, shape::word4, sign::mixed)};
+
+        check_midpoint_i(a, b);
+        check_midpoint_i(b, a);
+
+        if (boost::detail::test_errors() != 0)
+        {
+            return;
+        }
+    }
+}
+
+void test_constexpr_i()
+{
+    static_assert(midpoint(int256{0}, int256{10}) == int256{5}, "midpoint(0, 10)");
+    static_assert(midpoint(int256{0}, int256{-10}) == int256{-5}, "midpoint(0, -10)");
+    static_assert(midpoint(int256{0}, int256{9}) == int256{4}, "rounds towards the first argument");
+    static_assert(midpoint(int256{9}, int256{0}) == int256{5}, "rounds towards the first argument");
+
+    static_assert(midpoint(min_i, min_i) == min_i, "no overflow at MIN");
+    static_assert(midpoint(max_i, max_i) == max_i, "no overflow at MAX");
+    static_assert(midpoint(min_i, max_i) == int256{-1}, "MIN to MAX, rounding towards MIN");
+    static_assert(midpoint(max_i, min_i) == int256{0}, "MAX to MIN, rounding towards MAX");
+}
+
+#endif // BOOST_INT256_TEST_HAS_SIGNED
+
 } // namespace
 
 int main()
@@ -165,6 +309,13 @@ int main()
     test_known_answers();
     test_no_overflow();
     test_corpus_and_random();
+
+    #if defined(BOOST_INT256_TEST_HAS_SIGNED)
+    test_constexpr_i();
+    test_known_answers_i();
+    test_extremes_i();
+    test_corpus_and_random_i();
+    #endif
 
     return boost::report_errors();
 }

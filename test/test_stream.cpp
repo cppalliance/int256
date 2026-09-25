@@ -12,6 +12,12 @@
 //     bare leading zero is not a prefix in hex;
 //   * "0x1fz" must yield 31 and leave only "z" unread, so the prefix length is
 //     counted as consumed.
+//
+// Conductor finding F5 (iostream.hpp: std::internal was ignored) is fixed:
+// the std::internal cases in test_width_and_fill and
+// test_signed_output_and_input pin the corrected, builtin-matching fill
+// placement (verified with live probes against builtin int/unsigned long
+// long at runtime, not just hardcoded strings).
 
 #include "oracle.hpp"
 
@@ -32,6 +38,7 @@ int main()
 #include <string>
 
 using boost::int256::uint256;
+using boost::int256::int256;
 
 namespace
 {
@@ -187,6 +194,23 @@ void test_width_and_fill()
         os << std::setw(80) << uint256_max();
         BOOST_TEST_EQ(os.str().size(), static_cast<std::size_t>(80));
         BOOST_TEST_EQ(os.str().substr(0, 2), std::string{"  "});
+    }
+    {
+        // F5: std::internal places the fill after the 0x prefix and before
+        // the digits, matching the builtin unsigned model exactly (checked
+        // against a live builtin at runtime rather than a hardcoded string,
+        // so this stays correct if the standard library's own placement
+        // rule is ever read differently than expected here).
+        std::ostringstream builtin_stream;
+        builtin_stream << std::internal << std::setw(8) << std::setfill('0')
+                       << std::hex << std::showbase << 255ULL;
+
+        std::ostringstream os;
+        os << std::internal << std::setw(8) << std::setfill('0')
+           << std::hex << std::showbase << uint256{255U};
+
+        BOOST_TEST_EQ(os.str(), builtin_stream.str());
+        BOOST_TEST_EQ(os.str(), std::string{"0x0000ff"});
     }
 }
 
@@ -554,6 +578,215 @@ void test_successive_reads()
     BOOST_TEST_EQ(d, uint256{4444U});
 }
 
+std::string insert_i(const int256& v, std::ios_base::fmtflags flags)
+{
+    std::ostringstream os;
+    os.flags(flags);
+    os << v;
+
+    return os.str();
+}
+
+struct extract_i_result
+{
+    int256 value;
+    bool failed;
+    std::string remaining;
+};
+
+extract_i_result extract_i(const std::string& text, std::ios_base::fmtflags flags)
+{
+    std::istringstream is {text};
+    is.unsetf(std::ios_base::basefield);
+    is.setf(flags & std::ios_base::basefield, std::ios_base::basefield);
+
+    int256 value {};
+    is >> value;
+
+    extract_i_result result {};
+    result.value = value;
+    result.failed = is.fail();
+
+    is.clear(is.rdstate() & ~std::ios_base::failbit);
+
+    std::string rest;
+    char c {};
+    while (is.get(c))
+    {
+        rest.push_back(c);
+    }
+    result.remaining = rest;
+
+    return result;
+}
+
+// The int128 defect C regression: sign before prefix, in every base. int128
+// prints "0x-ff" (prefix, then sign); int256 must print "-0xff" (sign, then
+// prefix).
+void test_defect_c_regression()
+{
+    const int256 negative {-255};
+
+    BOOST_TEST_EQ(insert_i(negative, std::ios_base::hex | std::ios_base::showbase), std::string{"-0xff"});
+    BOOST_TEST_EQ(insert_i(negative, std::ios_base::hex | std::ios_base::showbase | std::ios_base::uppercase),
+                  std::string{"-0XFF"});
+    BOOST_TEST_EQ(insert_i(negative, std::ios_base::oct | std::ios_base::showbase), std::string{"-0377"});
+
+    // Sanity: the sign is not simply absent from the prefix-free forms either.
+    BOOST_TEST_EQ(insert_i(negative, std::ios_base::hex), std::string{"-ff"});
+    BOOST_TEST_EQ(insert_i(negative, std::ios_base::oct), std::string{"-377"});
+    BOOST_TEST_EQ(insert_i(negative, std::ios_base::dec), std::string{"-255"});
+}
+
+void test_signed_output_and_input()
+{
+    const int256 min_v {INT64_MIN, UINT64_C(0), UINT64_C(0), UINT64_C(0)};
+    const int256 max_v {INT64_MAX, UINT64_MAX, UINT64_MAX, UINT64_MAX};
+
+    // Negatives in every base.
+    BOOST_TEST_EQ(insert_i(int256{-1}, std::ios_base::dec), std::string{"-1"});
+    BOOST_TEST_EQ(insert_i(int256{-1}, std::ios_base::hex), std::string{"-1"});
+    BOOST_TEST_EQ(insert_i(int256{-1}, std::ios_base::oct), std::string{"-1"});
+    BOOST_TEST_EQ(insert_i(int256{-42}, std::ios_base::dec), std::string{"-42"});
+
+    // showpos prints + for a non-negative int256 in decimal only; a negative
+    // one still just gets its minus sign (not doubled).
+    BOOST_TEST_EQ(insert_i(int256{42}, std::ios_base::dec | std::ios_base::showpos), std::string{"+42"});
+    BOOST_TEST_EQ(insert_i(int256{-42}, std::ios_base::dec | std::ios_base::showpos), std::string{"-42"});
+    BOOST_TEST_EQ(insert_i(int256{0}, std::ios_base::dec | std::ios_base::showpos), std::string{"+0"});
+
+    // uppercase.
+    BOOST_TEST_EQ(insert_i(int256{-255}, std::ios_base::hex | std::ios_base::uppercase), std::string{"-FF"});
+
+    // setw/fill: the sign counts toward the field width, exactly like a
+    // builtin signed integer.
+    {
+        std::ostringstream os;
+        os << std::setw(6) << int256{-42};
+        BOOST_TEST_EQ(os.str(), std::string{"   -42"});
+    }
+    {
+        // Right adjustment (the default) pads before the whole formatted
+        // sign-and-digits sequence, exactly like a builtin signed integer;
+        // getting the fill between the sign and the digits needs std::internal.
+        std::ostringstream os;
+        os << std::setw(6) << std::setfill('0') << int256{-42};
+        BOOST_TEST_EQ(os.str(), std::string{"000-42"});
+    }
+    {
+        std::ostringstream os;
+        os << std::setw(6) << std::left << int256{-42};
+        BOOST_TEST_EQ(os.str(), std::string{"-42   "});
+    }
+    {
+        // F5: std::internal places the fill between the sign and the
+        // digits, matching a builtin signed integer (verified with a probe:
+        // os << std::internal << std::setw(6) << std::setfill('0') << -42
+        // on a plain int gives "-00042" too).
+        std::ostringstream os;
+        os << std::internal << std::setw(6) << std::setfill('0') << int256{-42};
+        BOOST_TEST_EQ(os.str(), std::string{"-00042"});
+    }
+    {
+        // F5: with a base prefix, the fill goes after the sign AND the
+        // prefix, before the magnitude digits.
+        std::ostringstream os;
+        os << std::internal << std::setw(9) << std::setfill('0')
+           << std::hex << std::showbase << int256{-255};
+        BOOST_TEST_EQ(os.str(), std::string{"-0x0000ff"});
+    }
+    {
+        // F5: showpos's '+' is a sign for this purpose too.
+        std::ostringstream os;
+        os << std::internal << std::showpos << std::setw(8) << std::setfill('0') << int256{42};
+        BOOST_TEST_EQ(os.str(), std::string{"+0000042"});
+    }
+
+    // MIN and MAX round trip through decimal, and MIN through hex (its own
+    // magnitude, sign-magnitude in every base).
+    BOOST_TEST_EQ(insert_i(min_v, std::ios_base::dec),
+                  std::string{"-57896044618658097711785492504343953926634992332820282019728792003956564819968"});
+    BOOST_TEST_EQ(insert_i(max_v, std::ios_base::dec),
+                  std::string{"57896044618658097711785492504343953926634992332820282019728792003956564819967"});
+
+    {
+        const auto r {extract_i(insert_i(min_v, std::ios_base::dec), std::ios_base::dec)};
+        BOOST_TEST(!r.failed);
+        BOOST_TEST(r.value == min_v);
+    }
+    {
+        const auto r {extract_i(insert_i(max_v, std::ios_base::dec), std::ios_base::dec)};
+        BOOST_TEST(!r.failed);
+        BOOST_TEST(r.value == max_v);
+    }
+
+    // operator>> accepts a leading '-', including with a 0x or 0 prefix.
+    {
+        const auto r {extract_i("-0xff", std::ios_base::hex)};
+        BOOST_TEST(!r.failed);
+        BOOST_TEST(r.value == int256{-255});
+    }
+    {
+        const auto r {extract_i("-0377", std::ios_base::oct)};
+        BOOST_TEST(!r.failed);
+        BOOST_TEST(r.value == int256{-255});
+    }
+    {
+        const auto r {extract_i("-255", std::ios_base::dec)};
+        BOOST_TEST(!r.failed);
+        BOOST_TEST(r.value == int256{-255});
+    }
+
+    // A leading '+' is rejected, matching the literal rule.
+    {
+        const auto r {extract_i("+1", std::ios_base::dec)};
+        BOOST_TEST(r.failed);
+    }
+
+    // One past MAX and one past MIN both fail and zero the value.
+    {
+        const auto r {extract_i(
+            "57896044618658097711785492504343953926634992332820282019728792003956564819968",
+            std::ios_base::dec)};
+        BOOST_TEST(r.failed);
+        BOOST_TEST(r.value == int256{});
+    }
+    {
+        const auto r {extract_i(
+            "-57896044618658097711785492504343953926634992332820282019728792003956564819969",
+            std::ios_base::dec)};
+        BOOST_TEST(r.failed);
+        BOOST_TEST(r.value == int256{});
+    }
+
+    // Round trip over a spread of random signed values, every base.
+    const std::ios_base::fmtflags bases[] {std::ios_base::dec, std::ios_base::hex, std::ios_base::oct};
+    for (std::size_t i {0}; i < N; ++i)
+    {
+        const int256 v {random_int256(rng, shape::word4, sign::mixed)};
+
+        for (const auto base : bases)
+        {
+            const auto text {insert_i(v, base)};
+            const auto r {extract_i(text, base)};
+
+            BOOST_TEST(!r.failed);
+            BOOST_TEST(r.value == v);
+        }
+
+        if (boost::detail::test_errors() != 0)
+        {
+            return;
+        }
+    }
+}
+
+void test_signed_stream()
+{
+    test_defect_c_regression();
+    test_signed_output_and_input();
+}
+
 } // namespace
 
 int main()
@@ -572,6 +805,8 @@ int main()
     test_successive_reads();
     test_output_bases();
     test_round_trips();
+
+    test_signed_stream();
 
     return boost::report_errors();
 }

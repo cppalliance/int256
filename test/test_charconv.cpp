@@ -36,6 +36,7 @@ int main()
 #include <vector>
 
 using boost::int256::uint256;
+using boost::int256::int256;
 
 namespace
 {
@@ -389,8 +390,129 @@ void test_traits()
     static_assert(!boost::charconv::detail::is_signed<uint256>::value, "uint256 is unsigned");
     static_assert(std::is_same<boost::charconv::detail::make_unsigned<uint256>::type, uint256>::value,
                   "make_unsigned is the identity");
-    static_assert(std::is_same<boost::charconv::detail::make_signed<uint256>::type, uint256>::value,
-                  "make_signed lands on uint256 until int256 exists");
+    // Now that int256 exists, make_signed<uint256> lands on it instead of
+    // uint256 itself (the int128 defect this mirrors: charconv.hpp:38-43
+    // temporarily mapped it to uint256 before int256 landed).
+    static_assert(std::is_same<boost::charconv::detail::make_signed<uint256>::type, int256>::value,
+                  "make_signed<uint256> is int256");
+
+    static_assert(boost::charconv::detail::is_signed<int256>::value, "int256 is signed");
+    static_assert(std::is_same<boost::charconv::detail::make_unsigned<int256>::type, uint256>::value,
+                  "make_unsigned<int256> is uint256");
+    static_assert(std::is_same<boost::charconv::detail::make_signed<int256>::type, int256>::value,
+                  "make_signed<int256> is the identity");
+}
+
+std::string to_string_in_base_i(const int256& v, int base, bool* ok)
+{
+    char buffer[buffer_size] {};
+    const auto r {boost::charconv::to_chars(buffer, buffer + sizeof(buffer), v, base)};
+
+    if (ok != nullptr)
+    {
+        *ok = static_cast<bool>(r);
+    }
+
+    if (!r)
+    {
+        return std::string{};
+    }
+
+    return std::string{buffer, r.ptr};
+}
+
+// Every base, every value in the signed corpus, both directions, mirroring
+// test_from_chars_round_trips above.
+void test_signed_round_trips()
+{
+    for (int base {2}; base <= 36; ++base)
+    {
+        for (const auto& v : signed_edge_values())
+        {
+            bool ok {false};
+            const auto text {to_string_in_base_i(v, base, &ok)};
+            BOOST_TEST(ok);
+
+            int256 parsed {};
+            const auto r {boost::charconv::from_chars(text.data(), text.data() + text.size(), parsed, base)};
+
+            BOOST_TEST(r);
+            BOOST_TEST(r.ec == std::errc{});
+            BOOST_TEST_EQ(r.ptr, text.data() + text.size());
+            BOOST_TEST(parsed == v);
+        }
+
+        if (boost::detail::test_errors() != 0)
+        {
+            std::cerr << "  base = " << base << std::endl;
+            return;
+        }
+    }
+}
+
+// MAX and MIN, every base: the sign never gets in the way of the magnitude
+// digits, and appending a digit overflows in either direction.
+void test_signed_from_chars_maximum_and_minimum()
+{
+    constexpr int256 min_v {INT64_MIN, UINT64_C(0), UINT64_C(0), UINT64_C(0)};
+    constexpr int256 max_v {INT64_MAX, UINT64_MAX, UINT64_MAX, UINT64_MAX};
+
+    for (int base {2}; base <= 36; ++base)
+    {
+        for (const auto& v : {min_v, max_v})
+        {
+            bool ok {false};
+            const auto text {to_string_in_base_i(v, base, &ok)};
+            BOOST_TEST(ok);
+
+            int256 parsed {};
+            const auto r {boost::charconv::from_chars(text.data(), text.data() + text.size(), parsed, base)};
+            BOOST_TEST(r);
+            BOOST_TEST_EQ(r.ptr, text.data() + text.size());
+            BOOST_TEST(parsed == v);
+
+            // Appending a zero multiplies the magnitude by the base, which no
+            // longer fits either boundary.
+            auto too_big {text};
+            too_big.push_back('0');
+
+            int256 overflowed {};
+            const auto r2 {boost::charconv::from_chars(too_big.data(), too_big.data() + too_big.size(), overflowed, base)};
+            BOOST_TEST(!r2);
+            BOOST_TEST(r2.ec == std::errc::result_out_of_range);
+        }
+    }
+
+    // A leading '+' is invalid, matching the literal and detail::from_chars rule.
+    {
+        const std::string text {"+1"};
+        int256 parsed {};
+        const auto r {boost::charconv::from_chars(text.data(), text.data() + text.size(), parsed)};
+        BOOST_TEST(!r);
+        BOOST_TEST(r.ec == std::errc::invalid_argument);
+    }
+}
+
+void test_signed_random_round_trips()
+{
+    for (std::size_t i {0}; i < N; ++i)
+    {
+        const int256 v {random_int256(rng, shape::word4, sign::mixed)};
+
+        char buffer[buffer_size] {};
+        const auto to_r {boost::charconv::to_chars(buffer, buffer + sizeof(buffer), v)};
+        BOOST_TEST(to_r);
+
+        int256 parsed {};
+        const auto from_r {boost::charconv::from_chars(buffer, to_r.ptr, parsed)};
+        BOOST_TEST(from_r);
+        BOOST_TEST(parsed == v);
+
+        if (boost::detail::test_errors() != 0)
+        {
+            return;
+        }
+    }
 }
 
 } // namespace
@@ -407,6 +529,10 @@ int main()
     test_to_chars_every_base();
     test_from_chars_round_trips();
     test_random_round_trips();
+
+    test_signed_round_trips();
+    test_signed_from_chars_maximum_and_minimum();
+    test_signed_random_round_trips();
 
     return boost::report_errors();
 }

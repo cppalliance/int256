@@ -37,6 +37,10 @@ using boost::int256::cmp_less_equal;
 using boost::int256::cmp_greater_equal;
 using boost::int256::in_range;
 
+#if defined(BOOST_INT256_TEST_HAS_SIGNED)
+using boost::int256::int256;
+#endif
+
 namespace
 {
 
@@ -232,6 +236,149 @@ void test_constraints()
     static_assert(!is_comparable<int, long>::value, "two builtins are not this overload set");
 }
 
+#if defined(BOOST_INT256_TEST_HAS_SIGNED)
+
+//=====================================
+// int256: the same mathematical comparison, now with a lhs that can itself
+// be negative. The reference here is smp (an arbitrary precision signed
+// type), which sidesteps the sign/magnitude bookkeeping the uint256 version
+// above needs, since a builtin converts into it exactly and correctly signed
+// either way.
+//=====================================
+
+constexpr int256 min_i {INT64_MIN, UINT64_C(0), UINT64_C(0), UINT64_C(0)};
+constexpr int256 max_i {INT64_MAX, UINT64_MAX, UINT64_MAX, UINT64_MAX};
+
+template <typename T>
+void test_against_reference_i()
+{
+    for (std::size_t i {0}; i < N; ++i)
+    {
+        const auto rhs {draw<T>()};
+        const int256 lhs {random_int256(rng, shape::word4, sign::mixed)};
+
+        const smp lhs_wide {to_smp(lhs)};
+        const smp rhs_wide {rhs};
+
+        const bool expect_equal {lhs_wide == rhs_wide};
+        const bool expect_less {lhs_wide < rhs_wide};
+
+        BOOST_TEST_EQ(cmp_equal(lhs, rhs), expect_equal);
+        BOOST_TEST_EQ(cmp_not_equal(lhs, rhs), !expect_equal);
+        BOOST_TEST_EQ(cmp_less(lhs, rhs), expect_less);
+        BOOST_TEST_EQ(cmp_greater_equal(lhs, rhs), !expect_less);
+        BOOST_TEST_EQ(cmp_greater(lhs, rhs), !expect_less && !expect_equal);
+        BOOST_TEST_EQ(cmp_less_equal(lhs, rhs), expect_less || expect_equal);
+
+        // Reversed operands must be consistent.
+        BOOST_TEST_EQ(cmp_equal(rhs, lhs), expect_equal);
+        BOOST_TEST_EQ(cmp_greater(rhs, lhs), expect_less);
+        BOOST_TEST_EQ(cmp_less(rhs, lhs), !expect_less && !expect_equal);
+
+        if (boost::detail::test_errors() != 0)
+        {
+            std::cerr << "  lhs = " << hex_words(lhs) << std::endl;
+            return;
+        }
+    }
+}
+
+template <typename T>
+void test_in_range_i()
+{
+    const int256 zero {};
+    const int256 one {1};
+    const int256 minus_one {-1};
+
+    BOOST_TEST(in_range<T>(zero));
+    BOOST_TEST_EQ(in_range<T>(one), static_cast<T>(1) == 1);
+
+    // A negative int256 fits only when the target is itself signed.
+    BOOST_TEST_EQ(in_range<T>(minus_one), is_signed_operand<T>::value);
+
+    const int256 target_max {(std::numeric_limits<T>::max)()};
+    BOOST_TEST(in_range<T>(target_max));
+
+    // One past the target maximum never fits.
+    BOOST_TEST(!in_range<T>(target_max + 1));
+
+    // Nor does anything with a word above the low one set, nor either
+    // extreme of int256 itself, against any of these narrower builtins.
+    BOOST_TEST(!in_range<T>(int256{INT64_C(0), UINT64_C(0), UINT64_C(1), UINT64_C(0)}));
+    BOOST_TEST(!in_range<T>(max_i));
+    BOOST_TEST(!in_range<T>(min_i));
+
+    // The reverse direction: int256 is wider than every builtin tested here,
+    // so both of T's extremes always fit.
+    BOOST_TEST(in_range<int256>((std::numeric_limits<T>::max)()));
+    BOOST_TEST(in_range<int256>((std::numeric_limits<T>::min)()));
+}
+
+// The answers that differ from the operator once a cross-type comparison
+// with uint256 is involved: the operator applies the usual arithmetic
+// conversions (both operands become uint256, so int256{-1} becomes
+// uint256_max()), but the comparison functions never do.
+void test_pinned_answers_i()
+{
+    const int256 zero {};
+    const int256 minus_one {-1};
+
+    BOOST_TEST(minus_one == uint256_max());
+    BOOST_TEST(!cmp_equal(minus_one, uint256_max()));
+    BOOST_TEST(cmp_not_equal(minus_one, uint256_max()));
+
+    BOOST_TEST(!(minus_one < uint256{}));
+    BOOST_TEST(cmp_less(minus_one, uint256{}));
+    BOOST_TEST(cmp_greater(uint256{}, minus_one));
+    BOOST_TEST(!cmp_less(uint256{}, minus_one));
+
+    // Same sign, same type family: cmp_* and the operator agree.
+    BOOST_TEST(cmp_equal(zero, 0));
+    BOOST_TEST(cmp_equal(minus_one, -1));
+    BOOST_TEST(cmp_equal(minus_one, -1LL));
+    BOOST_TEST(cmp_less(minus_one, 0));
+
+    // MIN is far below any 64-bit minimum, and MAX far above any 64-bit
+    // maximum: nothing here is close enough to be a tie.
+    BOOST_TEST(cmp_less(min_i, (std::numeric_limits<std::int64_t>::min)()));
+    BOOST_TEST(cmp_greater(max_i, (std::numeric_limits<std::int64_t>::max)()));
+    BOOST_TEST(cmp_greater(max_i, (std::numeric_limits<std::uint64_t>::max)()));
+    BOOST_TEST(cmp_less((std::numeric_limits<std::uint64_t>::max)(), max_i));
+
+    // These are constant expressions.
+    static_assert(!cmp_equal(int256{-1}, uint256{UINT64_MAX, UINT64_MAX, UINT64_MAX, UINT64_MAX}),
+                  "cmp_equal(-1, uint256_max) is false");
+    static_assert(cmp_less(int256{-1}, uint256{}), "cmp_less(-1, 0) is true even though the operator disagrees");
+    static_assert(cmp_equal(int256{1}, 1), "cmp_equal(1, 1)");
+    static_assert(in_range<int>(int256{1}), "1 fits an int");
+    static_assert(!in_range<int>(min_i), "MIN does not fit an int");
+}
+
+void test_constraints_i()
+{
+    static_assert(is_comparable<int256, int>::value, "int is comparable");
+    static_assert(is_comparable<int256, unsigned>::value, "unsigned is comparable");
+    static_assert(is_comparable<int256, long long>::value, "long long is comparable");
+    static_assert(is_comparable<int256, uint256>::value, "cross type with uint256 is comparable");
+    static_assert(is_comparable<int256, int256>::value, "int256 is comparable with itself");
+    static_assert(is_comparable<int, int256>::value, "the reversed order works too");
+
+    static_assert(!is_comparable<int256, char>::value, "char is rejected");
+    static_assert(!is_comparable<int256, bool>::value, "bool is rejected");
+}
+
+struct test_caller_i
+{
+    template <typename T>
+    void operator()(T) const
+    {
+        test_against_reference_i<T>();
+        test_in_range_i<T>();
+    }
+};
+
+#endif // BOOST_INT256_TEST_HAS_SIGNED
+
 struct test_caller
 {
     template <typename T>
@@ -263,6 +410,13 @@ int main()
 
     test_pinned_answers();
     test_constraints();
+
+    #if defined(BOOST_INT256_TEST_HAS_SIGNED)
+    boost::mp11::mp_for_each<test_types>(test_caller_i());
+
+    test_pinned_answers_i();
+    test_constraints_i();
+    #endif
 
     return boost::report_errors();
 }

@@ -117,6 +117,31 @@ namespace int256_test {
 
 using boost::int256::uint256;
 
+// int256 is only forward declared until detail/int256_imp.hpp is wired into
+// int256.hpp. Its header guard is the feature test: every signed helper below is
+// gated on it so this file keeps compiling (with full unsigned coverage) both
+// before and after that header lands, with no second edit needed here.
+#if defined(BOOST_INT256_DETAIL_INT256_IMP_HPP)
+#  define BOOST_INT256_TEST_HAS_SIGNED 1
+using boost::int256::int256;
+
+// Bit-copies between the two 256-bit layouts, through each type's public
+// 4-word constructor rather than boost::int256::detail::to_signed_bits/
+// to_unsigned_bits: those are not exported by the C++20 module, so calling
+// them directly would break every test file that imports the module instead
+// of including the header. The bit pattern produced is identical either way,
+// since int256::words and uint256::words are both plain std::uint64_t[4].
+constexpr uint256 to_unsigned_bits(const int256& v) noexcept
+{
+    return uint256{v.words[3], v.words[2], v.words[1], v.words[0]};
+}
+
+constexpr int256 to_signed_bits(const uint256& v) noexcept
+{
+    return int256{static_cast<std::int64_t>(v.words[3]), v.words[2], v.words[1], v.words[0]};
+}
+#endif
+
 constexpr std::size_t N {static_cast<std::size_t>(BOOST_INT256_TEST_N)};
 
 // The operand families the differential tests draw from. Every pair of shapes is
@@ -341,6 +366,136 @@ inline const std::vector<uint256>& edge_values()
     return values;
 }
 
+#if defined(BOOST_INT256_TEST_HAS_SIGNED)
+
+// Prints an int256 the same way as a uint256: as its bit pattern, least
+// significant word first. The sign is visible in the top word, so no separate
+// minus-sign handling is needed here.
+inline std::string hex_words(const int256& v)
+{
+    return hex_words(to_unsigned_bits(v));
+}
+
+enum class sign
+{
+    pos,
+    neg,
+    mixed
+};
+
+// Draws a value of the requested shape and forces its sign by setting or
+// clearing bit 255 (the sign bit) in the unsigned domain, then bit-copies the
+// result into int256. This never routes through int256's own arithmetic, so the
+// oracle does not depend on the type it is checking.
+inline int256 random_int256(std::mt19937_64& rng, shape s, sign sg)
+{
+    const uint256 top_bit {uint256{UINT64_C(0x8000000000000000), UINT64_C(0), UINT64_C(0), UINT64_C(0)}};
+    const uint256 drawn {random_uint256(rng, s)};
+
+    bool negative {};
+    switch (sg)
+    {
+        case sign::pos:   negative = false; break;
+        case sign::neg:   negative = true; break;
+        case sign::mixed: negative = (rng() & UINT64_C(1)) != 0U; break;
+    }
+
+    const uint256 bits {negative ? (drawn | top_bit) : (drawn & ~top_bit)};
+
+    return to_signed_bits(bits);
+}
+
+// The Appendix B.7-style corpus for int256: every value here is either a small
+// known constant or built from the already-verified uint256 shift/bitwise ops,
+// then bit-copied to int256 with to_signed_bits so the corpus does not depend on
+// int256's own arithmetic.
+inline const std::vector<int256>& signed_edge_values()
+{
+    static const std::vector<int256> values {[]
+    {
+        std::vector<int256> v;
+
+        const int256 zero {};
+        const int256 one {INT64_C(0), UINT64_C(0), UINT64_C(0), UINT64_C(1)};
+        const int256 two {INT64_C(0), UINT64_C(0), UINT64_C(0), UINT64_C(2)};
+        const int256 min_v {INT64_MIN, UINT64_C(0), UINT64_C(0), UINT64_C(0)};
+        const int256 max_v {INT64_MAX, UINT64_MAX, UINT64_MAX, UINT64_MAX};
+
+        v.push_back(zero);
+        v.push_back(one);
+        v.push_back(-one);
+        v.push_back(two);
+        v.push_back(-two);
+        v.push_back(min_v);
+        v.push_back(min_v + 1);
+        v.push_back(max_v);
+        v.push_back(max_v - 1);
+
+        // A value with plenty of low bits set, well clear of either boundary.
+        const uint256 two_254 {uint256{UINT64_C(0), UINT64_C(0), UINT64_C(0), UINT64_C(1)} << 254U};
+        v.push_back(-to_signed_bits(two_254));
+
+        // 2^63, 2^64 - 1, 2^64, 2^127, 2^128, 2^191, 2^192, each sign.
+        const unsigned exps[] {63U, 64U, 127U, 128U, 191U, 192U};
+        for (const auto k : exps)
+        {
+            const uint256 p {uint256{UINT64_C(0), UINT64_C(0), UINT64_C(0), UINT64_C(1)} << k};
+            const int256 sp {to_signed_bits(p)};
+            v.push_back(sp);
+            v.push_back(-sp);
+        }
+
+        const uint256 two_64_m1 {(uint256{UINT64_C(0), UINT64_C(0), UINT64_C(0), UINT64_C(1)} << 64U) - 1U};
+        const int256 s64m1 {to_signed_bits(two_64_m1)};
+        v.push_back(s64m1);
+        v.push_back(-s64m1);
+
+        // INT64_MIN read through the scalar constructor, exercising sign fill
+        // into words 1..3 from a single 64-bit source, distinct from the
+        // 4-word construction of -2^63 above.
+        v.push_back(int256{static_cast<std::int64_t>(INT64_MIN)});
+
+        // For each word count k in {1, 2, 3}: all ones below word k, each sign.
+        // (k == 4, all four words set, is the bit pattern for -1 and is already
+        // covered above.)
+        for (unsigned k {1}; k < 4U; ++k)
+        {
+            uint256 bits {};
+            for (unsigned w {0}; w < k; ++w)
+            {
+                bits.words[w] = UINT64_MAX;
+            }
+
+            const int256 sp {to_signed_bits(bits)};
+            v.push_back(sp);
+            v.push_back(-sp);
+        }
+
+        return v;
+    }()};
+
+    return values;
+}
+
+// mp's own >> on a negative operand is not a trustworthy reference (multiple
+// Boost releases have disagreed on its rounding), so an arithmetic right shift
+// is instead checked against this identity, which only uses the already-verified
+// unsigned uint256 right shift: for x >= 0, x >> k is unchanged; for x < 0,
+// x >> k == ~((~x) >> k).
+inline int256 reference_arithmetic_shift_right(const int256& x, unsigned k)
+{
+    if (x.signed_high() >= 0)
+    {
+        return to_signed_bits(to_unsigned_bits(x) >> k);
+    }
+
+    const uint256 flipped {~to_unsigned_bits(x)};
+
+    return to_signed_bits(~(flipped >> k));
+}
+
+#endif // BOOST_INT256_TEST_HAS_SIGNED
+
 #ifndef BOOST_INT256_ORACLE_UNAVAILABLE
 
 using mp = boost::multiprecision::uint256_t;
@@ -453,6 +608,90 @@ inline bool fits_256(const wide& v)
     return v < (wide{1} << 256);
 }
 
+#if defined(BOOST_INT256_TEST_HAS_SIGNED)
+
+// The reference for int256: a signed 512-bit type, wide enough that nothing
+// int256 can compute overflows it. boost::multiprecision::int256_t is
+// sign-magnitude with range +-(2^256-1), so it is NOT a two's-complement oracle
+// and is deliberately not used here.
+using smp = boost::multiprecision::int512_t;
+
+inline smp to_smp(const int256& v)
+{
+    smp r {v.words[3]};
+    r <<= 64;
+    r |= smp{v.words[2]};
+    r <<= 64;
+    r |= smp{v.words[1]};
+    r <<= 64;
+    r |= smp{v.words[0]};
+
+    // Two's complement: the bit pattern above is the unsigned magnitude; when
+    // the sign bit (bit 63 of words[3]) is set, the value is that magnitude
+    // minus 2^256.
+    if (v.signed_high() < 0)
+    {
+        r -= smp{1} << 256;
+    }
+
+    return r;
+}
+
+// The inverse of to_smp: reduces an arbitrary signed 512-bit value into the
+// two's complement 256-bit range and bit-copies it into int256. Used to build
+// expected int256 results from wide arithmetic that may have gone outside
+// [MIN, MAX], e.g. a product or a modular exponentiation step.
+inline int256 from_smp_wrapped(const smp& v)
+{
+    const smp modulus {smp{1} << 256};
+
+    smp t {v % modulus};
+    if (t < 0)
+    {
+        t += modulus;
+    }
+
+    const smp mask {(std::numeric_limits<std::uint64_t>::max)()};
+    uint256 bits {};
+    for (std::size_t i {0}; i < 4U; ++i)
+    {
+        bits.words[i] = static_cast<std::uint64_t>(smp{t & mask});
+        t >>= 64;
+    }
+
+    return to_signed_bits(bits);
+}
+
+inline std::string hex_words(const smp& v)
+{
+    return hex_words(from_smp_wrapped(v));
+}
+
+inline bool report_mismatch_i(const char* what, const int256& lhs, const int256& rhs,
+                               const int256& got, const smp& expected)
+{
+    std::cerr << "int256 differential mismatch in " << what << '\n'
+              << "  lhs      = " << hex_words(lhs) << '\n'
+              << "  rhs      = " << hex_words(rhs) << '\n'
+              << "  got      = " << hex_words(got) << '\n'
+              << "  expected = " << hex_words(expected) << std::endl;
+
+    return false;
+}
+
+inline bool report_mismatch_i(const char* what, const int256& lhs,
+                               const int256& got, const smp& expected)
+{
+    std::cerr << "int256 differential mismatch in " << what << '\n'
+              << "  operand  = " << hex_words(lhs) << '\n'
+              << "  got      = " << hex_words(got) << '\n'
+              << "  expected = " << hex_words(expected) << std::endl;
+
+    return false;
+}
+
+#endif // BOOST_INT256_TEST_HAS_SIGNED
+
 // Reads the low bits of a non-negative builtin operand into the reference type.
 // The wide overload is only instantiated for the builtin 128-bit types, so the
 // narrow types never see a shift by 64.
@@ -560,6 +799,21 @@ inline bool report_string_mismatch(const char* what, const uint256& value,
 #define BOOST_INT256_TEST_STRING(what, value, got, expected) \
     BOOST_TEST((got) == (expected) || ::int256_test::report_string_mismatch(what, value, got, expected))
 
+#if defined(BOOST_INT256_TEST_HAS_SIGNED) && !defined(BOOST_INT256_ORACLE_UNAVAILABLE)
+
+// raw_expected is the exact mathematical value (not yet reduced into int256's
+// range); from_smp_wrapped performs the same reduction a wrapping operator
+// applies, so callers pass the unreduced smp expression directly.
+#define BOOST_INT256_TEST_BINARY_I(what, lhs, rhs, got, raw_expected) \
+    BOOST_TEST((got) == ::int256_test::from_smp_wrapped(raw_expected) || \
+               ::int256_test::report_mismatch_i(what, lhs, rhs, got, raw_expected))
+
+#define BOOST_INT256_TEST_UNARY_I(what, operand, got, raw_expected) \
+    BOOST_TEST((got) == ::int256_test::from_smp_wrapped(raw_expected) || \
+               ::int256_test::report_mismatch_i(what, operand, got, raw_expected))
+
+#endif
+
 using int256_test::N;
 using int256_test::shape;
 using int256_test::shape_name;
@@ -568,6 +822,18 @@ using int256_test::edge_values;
 using int256_test::hex_words;
 using int256_test::random_uint256;
 using int256_test::uint256_max;
+
+#if defined(BOOST_INT256_TEST_HAS_SIGNED)
+
+using int256_test::int256;
+using int256_test::to_signed_bits;
+using int256_test::to_unsigned_bits;
+using int256_test::sign;
+using int256_test::random_int256;
+using int256_test::signed_edge_values;
+using int256_test::reference_arithmetic_shift_right;
+
+#endif
 
 #ifndef BOOST_INT256_ORACLE_UNAVAILABLE
 
@@ -582,6 +848,15 @@ using int256_test::from_wide_truncated;
 using int256_test::fits_256;
 using int256_test::report_mismatch;
 using int256_test::report_string_mismatch;
+
+#if defined(BOOST_INT256_TEST_HAS_SIGNED)
+
+using int256_test::smp;
+using int256_test::to_smp;
+using int256_test::from_smp_wrapped;
+using int256_test::report_mismatch_i;
+
+#endif
 
 #endif
 

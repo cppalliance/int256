@@ -28,6 +28,14 @@ using boost::int256::uint256;
 using boost::int256::detail::builtin_i128;
 using boost::int256::detail::builtin_u128;
 
+// int256 is only forward declared until detail/int256_imp.hpp is wired into
+// int256.hpp; the signed sections below are gated on BOOST_INT256_TEST_HAS_SIGNED
+// (oracle.hpp's feature test for that header) so this file keeps compiling
+// before and after it lands.
+#if defined(BOOST_INT256_TEST_HAS_SIGNED)
+using boost::int256::int256;
+#endif
+
 namespace
 {
 
@@ -260,6 +268,218 @@ void test_random_pairs()
     }
 }
 
+#if defined(BOOST_INT256_TEST_HAS_SIGNED)
+
+// The exact mathematical value of a 128-bit builtin, sign preserved. smp is
+// wide enough that unlike uint256's widen(), there is no wraparound to reason
+// about here.
+smp widen_i(builtin_u128 v)
+{
+    const auto lo {static_cast<std::uint64_t>(v)};
+    const auto hi {static_cast<std::uint64_t>(v >> 64)};
+
+    return smp{smp{hi} << 64} | smp{lo};
+}
+
+smp widen_i(builtin_i128 v)
+{
+    if (v >= 0)
+    {
+        return widen_i(static_cast<builtin_u128>(v));
+    }
+
+    const auto negated_plus_one {static_cast<builtin_i128>(-(v + 1))};
+
+    return -(widen_i(static_cast<builtin_u128>(negated_plus_one)) + 1);
+}
+
+template <typename Builtin>
+bool report_builtin_i(const char* what, const int256& lhs, Builtin rhs, const int256& got, const smp& expected)
+{
+    std::cerr << "int256 builtin 128 parity mismatch in " << what << '\n'
+              << "  int256 operand  = " << hex_words(lhs) << '\n'
+              << "  builtin operand = " << hex_words(widen_i(rhs)) << '\n'
+              << "  got             = " << hex_words(got) << '\n'
+              << "  expected        = " << hex_words(expected) << std::endl;
+
+    return false;
+}
+
+#define CHECK_BUILTIN_I(what, lhs, rhs, got, raw_expected) \
+    BOOST_TEST((got) == ::int256_test::from_smp_wrapped(raw_expected) || \
+               report_builtin_i(what, lhs, rhs, got, raw_expected))
+
+// int256 with a builtin integer, including the builtin 128-bit types: the
+// result is int256 and comparisons are mathematically exact, since every
+// builtin fits inside int256's 256-bit range.
+template <typename Builtin>
+void check_one_i(const int256& x, Builtin v)
+{
+    const smp mx {to_smp(x)};
+    const smp mv {widen_i(v)};
+
+    BOOST_TEST_EQ(x == v, mx == mv);
+    BOOST_TEST_EQ(v == x, mv == mx);
+    BOOST_TEST_EQ(x != v, mx != mv);
+    BOOST_TEST_EQ(v != x, mv != mx);
+    BOOST_TEST_EQ(x <  v, mx <  mv);
+    BOOST_TEST_EQ(v <  x, mv <  mx);
+    BOOST_TEST_EQ(x <= v, mx <= mv);
+    BOOST_TEST_EQ(v <= x, mv <= mx);
+    BOOST_TEST_EQ(x >  v, mx >  mv);
+    BOOST_TEST_EQ(v >  x, mv >  mx);
+    BOOST_TEST_EQ(x >= v, mx >= mv);
+    BOOST_TEST_EQ(v >= x, mv >= mx);
+
+    {
+        const int256 got {x + v};
+        CHECK_BUILTIN_I("operator+(int256, builtin)", x, v, got, mx + mv);
+    }
+    {
+        const int256 got {v + x};
+        CHECK_BUILTIN_I("operator+(builtin, int256)", x, v, got, mv + mx);
+    }
+    {
+        const int256 got {x - v};
+        CHECK_BUILTIN_I("operator-(int256, builtin)", x, v, got, mx - mv);
+    }
+    {
+        const int256 got {v - x};
+        CHECK_BUILTIN_I("operator-(builtin, int256)", x, v, got, mv - mx);
+    }
+    {
+        const int256 got {x * v};
+        CHECK_BUILTIN_I("operator*(int256, builtin)", x, v, got, mx * mv);
+    }
+    {
+        const int256 got {v * x};
+        CHECK_BUILTIN_I("operator*(builtin, int256)", x, v, got, mv * mx);
+    }
+    if (mv != 0)
+    {
+        const int256 q {x / v};
+        CHECK_BUILTIN_I("operator/(int256, builtin)", x, v, q, mx / mv);
+
+        const int256 r {x % v};
+        CHECK_BUILTIN_I("operator%(int256, builtin)", x, v, r, mx % mv);
+    }
+    if (mx != 0)
+    {
+        const int256 q {v / x};
+        CHECK_BUILTIN_I("operator/(builtin, int256)", x, v, q, mv / mx);
+
+        const int256 r {v % x};
+        CHECK_BUILTIN_I("operator%(builtin, int256)", x, v, r, mv % mx);
+    }
+
+    {
+        int256 t {x};
+        t += v;
+        CHECK_BUILTIN_I("operator+=(builtin)", x, v, t, mx + mv);
+    }
+    {
+        int256 t {x};
+        t *= v;
+        CHECK_BUILTIN_I("operator*=(builtin)", x, v, t, mx * mv);
+    }
+    if (mv != 0)
+    {
+        int256 t {x};
+        t /= v;
+        CHECK_BUILTIN_I("operator/=(builtin)", x, v, t, mx / mv);
+    }
+}
+
+void test_signed_round_trips()
+{
+    for (std::size_t i {0}; i < N; ++i)
+    {
+        const builtin_u128 value {draw_unsigned()};
+
+        const int256 wide {value};
+        BOOST_TEST_EQ(wide.words[0], static_cast<std::uint64_t>(value));
+        BOOST_TEST_EQ(wide.words[1], static_cast<std::uint64_t>(value >> 64));
+        BOOST_TEST_EQ(wide.words[2], UINT64_C(0));
+        BOOST_TEST_EQ(wide.words[3], UINT64_C(0));
+        BOOST_TEST(static_cast<builtin_u128>(wide) == value);
+
+        const builtin_i128 as_signed {static_cast<builtin_i128>(value)};
+        const int256 from_signed {as_signed};
+        BOOST_TEST_EQ(from_signed.words[0], static_cast<std::uint64_t>(value));
+        BOOST_TEST_EQ(from_signed.words[1], static_cast<std::uint64_t>(value >> 64));
+
+        const auto fill {as_signed < 0 ? UINT64_MAX : UINT64_C(0)};
+        BOOST_TEST_EQ(from_signed.words[2], fill);
+        BOOST_TEST_EQ(from_signed.words[3], fill);
+        BOOST_TEST(static_cast<builtin_i128>(from_signed) == as_signed);
+
+        if (boost::detail::test_errors() != 0)
+        {
+            return;
+        }
+    }
+}
+
+void test_signed_random_pairs()
+{
+    for (std::size_t i {0}; i < N; ++i)
+    {
+        const int256 x {random_int256(rng, shape::word4, sign::mixed)};
+
+        check_one_i(x, draw_unsigned());
+        check_one_i(x, draw_signed());
+
+        if (boost::detail::test_errors() != 0)
+        {
+            std::cerr << "  int256 operand = " << hex_words(x) << std::endl;
+            return;
+        }
+    }
+}
+
+void test_signed_edge_pairs()
+{
+    const builtin_u128 unsigned_edges[] {
+        static_cast<builtin_u128>(0),
+        static_cast<builtin_u128>(1),
+        static_cast<builtin_u128>(UINT64_MAX),
+        static_cast<builtin_u128>(UINT64_MAX) + 1,
+        static_cast<builtin_u128>(1) << 127,
+        ~static_cast<builtin_u128>(0)
+    };
+
+    const builtin_i128 signed_edges[] {
+        static_cast<builtin_i128>(0),
+        static_cast<builtin_i128>(1),
+        static_cast<builtin_i128>(-1),
+        static_cast<builtin_i128>(UINT64_MAX),
+        -static_cast<builtin_i128>(UINT64_MAX),
+        static_cast<builtin_i128>((static_cast<builtin_u128>(1) << 127) - 1),
+        static_cast<builtin_i128>(static_cast<builtin_u128>(1) << 127)
+    };
+
+    for (const auto& x : signed_edge_values())
+    {
+        for (const auto v : unsigned_edges)
+        {
+            check_one_i(x, v);
+        }
+
+        for (const auto v : signed_edges)
+        {
+            check_one_i(x, v);
+        }
+
+        if (boost::detail::test_errors() != 0)
+        {
+            std::cerr << "  int256 operand = " << hex_words(x) << std::endl;
+            return;
+        }
+    }
+}
+
+#endif // BOOST_INT256_TEST_HAS_SIGNED
+
 void test_edge_pairs()
 {
     const builtin_u128 unsigned_edges[] {
@@ -310,6 +530,12 @@ int main()
     test_builtin_left_shifts();
     test_edge_pairs();
     test_random_pairs();
+
+#if defined(BOOST_INT256_TEST_HAS_SIGNED)
+    test_signed_round_trips();
+    test_signed_edge_pairs();
+    test_signed_random_pairs();
+#endif
 
     return boost::report_errors();
 }

@@ -24,6 +24,14 @@
 using boost::int256::uint256;
 using namespace boost::int256::literals;
 
+// int256 is only forward declared until detail/int256_imp.hpp is wired into
+// int256.hpp; the section below is gated on that header's guard so this file
+// keeps compiling before and after it lands.
+#if defined(BOOST_INT256_DETAIL_INT256_IMP_HPP)
+#  define BOOST_INT256_TEST_HAS_SIGNED 1
+using boost::int256::int256;
+#endif
+
 template <typename T>
 BOOST_INT256_TEST_CONSTEVAL bool test_small()
 {
@@ -115,6 +123,98 @@ BOOST_INT256_TEST_CONSTEVAL bool test_wide()
     return true;
 }
 
+#if defined(BOOST_INT256_TEST_HAS_SIGNED)
+
+// Multi-word operands whose top word is kept within std::int64_t's range, so
+// brace-init is a converting constructor call rather than a narrowing
+// conversion (unlike uint256's test_wide<T>, this cannot be templated: several
+// of its hard-coded top words, e.g. UINT64_MAX, do not fit int256's signed top
+// word).
+BOOST_INT256_TEST_CONSTEVAL bool test_signed_wide()
+{
+    constexpr int256 x {INT64_C(1), UINT64_C(2), UINT64_C(3), UINT64_C(4)};
+    constexpr int256 y {INT64_C(0), UINT64_C(0), UINT64_MAX, UINT64_MAX - 2U};
+
+    static_assert(x > y, "");
+    static_assert(y < x, "");
+    static_assert(x == x, "");
+    static_assert(x != y, "");
+
+    constexpr int256 neg_x {-x};
+    static_assert(neg_x < 0, "");
+    static_assert(-neg_x == x, "");
+
+    constexpr int256 min_v {INT64_MIN, UINT64_C(0), UINT64_C(0), UINT64_C(0)};
+    constexpr int256 max_v {INT64_MAX, UINT64_MAX, UINT64_MAX, UINT64_MAX};
+    static_assert(max_v + int256{1} == min_v, "");
+    static_assert(min_v - int256{1} == max_v, "");
+    static_assert(min_v / int256{-1} == min_v, "");
+    static_assert(min_v % int256{-1} == int256{0}, "");
+    static_assert(boost::int256::abs(min_v) == min_v, "");
+
+    // Division with a two word divisor and a negative dividend; the identity
+    // holds regardless of the specific quotient, which is the Knuth path here
+    // because the reciprocal accelerator is gated to run time.
+    constexpr int256 two_128 {INT64_C(0), UINT64_C(1), UINT64_C(0), UINT64_C(0)};
+    constexpr int256 negative_max {-max_v};
+    static_assert((negative_max / two_128) * two_128 + (negative_max % two_128) == negative_max, "");
+
+    // Shifts that cross every word boundary; right shift is arithmetic.
+    constexpr int256 one {INT64_C(0), UINT64_C(0), UINT64_C(0), UINT64_C(1)};
+    static_assert(((one << 64U) >> 64U) == one, "");
+    static_assert(((one << 128U) >> 128U) == one, "");
+    // Shifting 1 into bit 255 sets the sign bit (giving MIN), so the
+    // arithmetic right shift back down sign extends to -1, not +1.
+    static_assert(((one << 255U) >> 255U) == int256{-1}, "");
+    static_assert((int256{-1} >> 255U) == int256{-1}, "");
+    static_assert((min_v >> 1U) == int256(static_cast<std::int64_t>(UINT64_C(0xC000000000000000)), UINT64_C(0), UINT64_C(0), UINT64_C(0)), "");
+    static_assert((min_v << 1U) == int256{}, "");
+
+    return true;
+}
+
+BOOST_INT256_TEST_CONSTEVAL bool test_signed_literals()
+{
+    // Literals never carry a leading minus sign; -1_i256 is the unary minus
+    // operator applied to the literal 1_i256, evaluated in constant expression.
+    static_assert(-1_i256 == int256{-1}, "");
+    // 2^127 sets bit 63 of word1 (bit 127 = word1's top bit), not word2.
+    static_assert(170141183460469231731687303715884105728_i256 ==
+                  int256(INT64_C(0), UINT64_C(0), UINT64_C(1) << 63, UINT64_C(0)), "2^127");
+    static_assert(-170141183460469231731687303715884105728_i256 ==
+                  -int256(INT64_C(0), UINT64_C(0), UINT64_C(1) << 63, UINT64_C(0)), "-2^127");
+    static_assert(57896044618658097711785492504343953926634992332820282019728792003956564819967_i256 ==
+                  int256(INT64_MAX, UINT64_MAX, UINT64_MAX, UINT64_MAX), "MAX");
+    static_assert("0x7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF"_i256 ==
+                  int256(INT64_MAX, UINT64_MAX, UINT64_MAX, UINT64_MAX), "MAX via hex string form");
+
+    // A raw literal never carries a leading minus sign, so the raw token for
+    // MIN's own magnitude (2^255) is out of range on its own: MAX is the
+    // largest value a raw (or bare-prefixed) literal may spell, exactly like
+    // -9223372036854775808LL is ill-formed for INT64_MIN. MIN is reached only
+    // through a string or macro form, which passes the '-' to parse_literal
+    // directly instead of relying on the unary minus operator.
+    static_assert(BOOST_INT256_INT256_C(-57896044618658097711785492504343953926634992332820282019728792003956564819968) ==
+                  int256(INT64_MIN, UINT64_C(0), UINT64_C(0), UINT64_C(0)), "MIN via decimal string macro");
+    static_assert(BOOST_INT256_INT256_C(-0x8000000000000000000000000000000000000000000000000000000000000000) ==
+                  int256(INT64_MIN, UINT64_C(0), UINT64_C(0), UINT64_C(0)), "MIN via hex string macro");
+    static_assert("-0x8000000000000000000000000000000000000000000000000000000000000000"_i256 ==
+                  int256(INT64_MIN, UINT64_C(0), UINT64_C(0), UINT64_C(0)), "MIN via hex string literal");
+    static_assert("-57896044618658097711785492504343953926634992332820282019728792003956564819968"_i256 ==
+                  int256(INT64_MIN, UINT64_C(0), UINT64_C(0), UINT64_C(0)), "MIN via decimal string literal");
+
+    // Negating the MAX literal (a well-formed raw token, since MAX itself
+    // fits) gives MIN + 1, one past what MIN via negation would reach.
+    static_assert(-57896044618658097711785492504343953926634992332820282019728792003956564819967_i256 ==
+                  int256(INT64_MIN, UINT64_C(0), UINT64_C(0), UINT64_C(0)) + int256{1}, "-MAX == MIN + 1");
+
+    static_assert(BOOST_INT256_INT256_C(-1) == int256{-1}, "INT256_C(-1)");
+
+    return true;
+}
+
+#endif // BOOST_INT256_TEST_HAS_SIGNED
+
 BOOST_INT256_TEST_CONSTEVAL bool test_literals()
 {
     // The literal parser runs in constant evaluation.
@@ -136,6 +236,12 @@ int main()
     static_assert(test_small<uint256>(), "");
     static_assert(test_wide<uint256>(), "");
     static_assert(test_literals(), "");
+
+#if defined(BOOST_INT256_TEST_HAS_SIGNED)
+    static_assert(test_small<int256>(), "");
+    static_assert(test_signed_wide(), "");
+    static_assert(test_signed_literals(), "");
+#endif
 
     return 0;
 }

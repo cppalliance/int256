@@ -19,6 +19,14 @@
 
 using boost::int256::uint256;
 
+// int256 is only forward declared until detail/int256_imp.hpp is wired into
+// int256.hpp; the section below is gated on that header's guard so this file
+// keeps compiling before and after it lands.
+#if defined(BOOST_INT256_DETAIL_INT256_IMP_HPP)
+#  define BOOST_INT256_TEST_HAS_SIGNED 1
+using boost::int256::int256;
+#endif
+
 namespace
 {
 
@@ -105,6 +113,74 @@ static_assert((two_192 + 1U) * (two_64 + 1U) == uint256(UINT64_C(1), UINT64_C(0)
               "(2^192 + 1)(2^64 + 1)");
 static_assert(two_255 * 2U == zero, "2^255 * 2 wraps to zero");
 static_assert((one << 127U) * two_128 == two_255, "2^127 * 2^128");
+
+#if defined(BOOST_INT256_TEST_HAS_SIGNED)
+
+constexpr int256 i_zero {};
+constexpr int256 i_one {INT64_C(0), UINT64_C(0), UINT64_C(0), UINT64_C(1)};
+constexpr int256 i_minus_one {-1};
+constexpr int256 i_min {INT64_MIN, UINT64_C(0), UINT64_C(0), UINT64_C(0)};
+constexpr int256 i_max {INT64_MAX, UINT64_MAX, UINT64_MAX, UINT64_MAX};
+
+static_assert((std::numeric_limits<int256>::max)() == i_max, "numeric_limits max");
+static_assert((std::numeric_limits<int256>::min)() == i_min, "numeric_limits min");
+static_assert(std::numeric_limits<int256>::is_modulo, "wrapping is intended");
+static_assert(std::numeric_limits<int256>::is_signed, "int256 is signed");
+
+// MIN's magnitude is not representable, so negation and abs wrap it back to
+// itself, exactly like the built-in signed integers.
+static_assert(-i_min == i_min, "-MIN wraps to MIN");
+static_assert(boost::int256::abs(i_min) == i_min, "abs(MIN) wraps to MIN");
+static_assert(boost::int256::abs(i_min + i_one) == i_max, "abs(MIN + 1) == MAX");
+static_assert(boost::int256::abs(i_max) == i_max, "abs(MAX) == MAX");
+static_assert(boost::int256::abs(i_minus_one) == i_one, "abs(-1) == 1");
+
+// MIN / -1 wraps to MIN, and MIN % -1 is exactly zero.
+static_assert(i_min / i_minus_one == i_min, "MIN / -1 wraps to MIN");
+static_assert(i_min % i_minus_one == i_zero, "MIN % -1 == 0");
+
+// Wraparound at the signed range boundary.
+static_assert(i_max + i_one == i_min, "MAX + 1 wraps to MIN");
+static_assert(i_min - i_one == i_max, "MIN - 1 wraps to MAX");
+
+// Arithmetic right shift sign extends; left shift is logical (unsigned
+// domain), regardless of the operand's sign.
+static_assert((i_minus_one >> 255U) == i_minus_one, "-1 >> 255 == -1");
+static_assert((i_min >> 1U) == int256(static_cast<std::int64_t>(UINT64_C(0xC000000000000000)), UINT64_C(0), UINT64_C(0), UINT64_C(0)),
+              "MIN >> 1 sign extends");
+static_assert((i_min << 1U) == i_zero, "MIN << 1 shifts the sign bit out");
+
+// A negative scalar sign fills, matching the builtin signed integers exactly
+// (no widening surprise the way uint256{-1} has).
+static_assert(int256{-1} == i_minus_one, "int256{-1} == -1");
+
+// The signed mixed paths must agree with promoting the scalar first,
+// including for the most negative int64_t, which cannot be negated inside its
+// own type.
+constexpr std::int64_t i_scalar_min {(std::numeric_limits<std::int64_t>::min)()};
+constexpr int256 i_scalar_min_256 {i_scalar_min};
+constexpr int256 ia {INT64_C(42), UINT64_C(0), UINT64_C(1234), UINT64_C(7)};
+constexpr int256 ib {INT64_C(0), UINT64_C(0), UINT64_C(0), UINT64_C(5)};
+
+static_assert(ia + i_scalar_min == ia + i_scalar_min_256, "operator+(int256, Signed)");
+static_assert(i_scalar_min + ia == i_scalar_min_256 + ia, "operator+(Signed, int256)");
+static_assert(ia - i_scalar_min == ia - i_scalar_min_256, "operator-(int256, Signed)");
+static_assert(i_scalar_min - ia == i_scalar_min_256 - ia, "operator-(Signed, int256)");
+static_assert(ia * i_scalar_min == ia * i_scalar_min_256, "operator*(int256, Signed)");
+static_assert(i_scalar_min * ia == i_scalar_min_256 * ia, "operator*(Signed, int256)");
+static_assert(ia / i_scalar_min == ia / i_scalar_min_256, "operator/(int256, Signed)");
+static_assert(ia % i_scalar_min == ia % i_scalar_min_256, "operator%(int256, Signed)");
+static_assert(i_scalar_min / ib == i_scalar_min_256 / ib, "operator/(Signed, int256)");
+static_assert(i_scalar_min % ib == i_scalar_min_256 % ib, "operator%(Signed, int256)");
+
+// The division identity holds in constant evaluation.
+static_assert(i_min / int256{-7} != i_zero, "constant-evaluated division runs");
+static_assert(int256{-7} / int256{2} == int256{-3}, "-7 / 2 == -3 (truncating toward zero)");
+static_assert(int256{-7} % int256{2} == int256{-1}, "-7 % 2 == -1 (remainder takes the dividend's sign)");
+static_assert(int256{7} / int256{-2} == int256{-3}, "7 / -2 == -3");
+static_assert(int256{7} % int256{-2} == int256{1}, "7 % -2 == 1");
+
+#endif // BOOST_INT256_TEST_HAS_SIGNED
 
 } // namespace
 

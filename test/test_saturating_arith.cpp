@@ -15,6 +15,7 @@
 #include <limits>
 
 using boost::int256::uint256;
+using boost::int256::int256;
 using boost::int256::saturating_add;
 using boost::int256::saturating_sub;
 using boost::int256::saturating_mul;
@@ -213,6 +214,182 @@ void test_corpus_and_random()
     #endif
 }
 
+#ifndef BOOST_INT256_ORACLE_UNAVAILABLE
+
+// Signed saturating arithmetic clamps at MIN/MAX rather than at 0/UINT256_MAX.
+void check_saturating_i(const int256& a, const int256& b)
+{
+    const smp ma {to_smp(a)};
+    const smp mb {to_smp(b)};
+    constexpr int256 min_v {INT64_MIN, UINT64_C(0), UINT64_C(0), UINT64_C(0)};
+    constexpr int256 max_v {INT64_MAX, UINT64_MAX, UINT64_MAX, UINT64_MAX};
+    const smp smp_min {to_smp(min_v)};
+    const smp smp_max {to_smp(max_v)};
+
+    {
+        const smp exact {ma + mb};
+        const int256 expected {exact > smp_max ? max_v : (exact < smp_min ? min_v : from_smp_wrapped(exact))};
+        BOOST_TEST(saturating_add(a, b) == expected);
+    }
+    {
+        const smp exact {ma - mb};
+        const int256 expected {exact > smp_max ? max_v : (exact < smp_min ? min_v : from_smp_wrapped(exact))};
+        BOOST_TEST(saturating_sub(a, b) == expected);
+    }
+    {
+        const smp exact {ma * mb};
+        const int256 expected {exact > smp_max ? max_v : (exact < smp_min ? min_v : from_smp_wrapped(exact))};
+        BOOST_TEST(saturating_mul(a, b) == expected);
+    }
+    if (b != 0)
+    {
+        // The only overflowing division is MIN / -1, whose mathematical
+        // quotient (2^255) is one past MAX; every other division is exact.
+        const int256 expected {(a == min_v && b == int256{-1}) ? max_v : a / b};
+        BOOST_TEST(saturating_div(a, b) == expected);
+    }
+}
+
+#endif // BOOST_INT256_ORACLE_UNAVAILABLE
+
+void test_signed_clamps()
+{
+    constexpr int256 min_v {INT64_MIN, UINT64_C(0), UINT64_C(0), UINT64_C(0)};
+    constexpr int256 max_v {INT64_MAX, UINT64_MAX, UINT64_MAX, UINT64_MAX};
+    const int256 one_i {1};
+
+    // Addition at the top and bottom.
+    BOOST_TEST(saturating_add(max_v, one_i) == max_v);
+    BOOST_TEST(max_v + one_i == min_v);                  // the operator wraps
+    BOOST_TEST(saturating_add(min_v, int256{-1}) == min_v);
+    BOOST_TEST(saturating_add(max_v, min_v) == int256{-1});
+
+    // Subtraction at the top and bottom.
+    BOOST_TEST(saturating_sub(min_v, one_i) == min_v);
+    BOOST_TEST(min_v - one_i == max_v);                  // the operator wraps
+    BOOST_TEST(saturating_sub(max_v, int256{-1}) == max_v);
+
+    // Multiplication.
+    BOOST_TEST(saturating_mul(max_v, int256{2}) == max_v);
+    BOOST_TEST(saturating_mul(min_v, int256{2}) == min_v);
+    BOOST_TEST(saturating_mul(min_v, int256{-1}) == max_v);
+    BOOST_TEST(saturating_mul(max_v, int256{-1}) == -max_v);
+
+    // Division: MIN / -1 is the one case that overflows (mathematical
+    // quotient 2^255), and it clamps to MAX instead of wrapping to MIN.
+    BOOST_TEST(saturating_div(min_v, int256{-1}) == max_v);
+    BOOST_TEST(min_v / int256{-1} == min_v);              // the operator wraps
+    BOOST_TEST(saturating_div(max_v, int256{-1}) == -max_v);
+    BOOST_TEST(saturating_div(int256{-7}, int256{2}) == int256{-3});
+}
+
+//=====================================
+// saturating_cast to and from int256
+//=====================================
+
+template <typename T>
+void check_cast_from_signed()
+{
+    constexpr int256 min_v {INT64_MIN, UINT64_C(0), UINT64_C(0), UINT64_C(0)};
+    constexpr int256 max_v {INT64_MAX, UINT64_MAX, UINT64_MAX, UINT64_MAX};
+
+    BOOST_TEST_EQ(saturating_cast<T>(int256{0}), static_cast<T>(0));
+    BOOST_TEST_EQ(saturating_cast<T>(int256{1}), static_cast<T>(1));
+
+    const auto target_max {(std::numeric_limits<T>::max)()};
+    BOOST_TEST_EQ(saturating_cast<T>(max_v), target_max);
+
+    // Negative int256 against an unsigned target clamps to zero, matching the
+    // builtin narrowing-to-unsigned convention this library follows
+    // elsewhere; against a signed target it clamps to the target's minimum.
+    if (std::numeric_limits<T>::is_signed)
+    {
+        const auto target_min {(std::numeric_limits<T>::min)()};
+        BOOST_TEST_EQ(saturating_cast<T>(min_v), target_min);
+        BOOST_TEST_EQ(saturating_cast<T>(int256{-1}), static_cast<T>(-1));
+    }
+    else
+    {
+        BOOST_TEST_EQ(saturating_cast<T>(min_v), static_cast<T>(0));
+        BOOST_TEST_EQ(saturating_cast<T>(int256{-1}), static_cast<T>(0));
+    }
+}
+
+void test_signed_saturating_cast()
+{
+    check_cast_from_signed<signed char>();
+    check_cast_from_signed<unsigned char>();
+    check_cast_from_signed<short>();
+    check_cast_from_signed<unsigned short>();
+    check_cast_from_signed<int>();
+    check_cast_from_signed<unsigned int>();
+    check_cast_from_signed<long>();
+    check_cast_from_signed<unsigned long>();
+    check_cast_from_signed<long long>();
+    check_cast_from_signed<unsigned long long>();
+
+    constexpr int256 min_v {INT64_MIN, UINT64_C(0), UINT64_C(0), UINT64_C(0)};
+    constexpr int256 max_v {INT64_MAX, UINT64_MAX, UINT64_MAX, UINT64_MAX};
+
+    // Casting to int256 is the identity.
+    BOOST_TEST(saturating_cast<int256>(min_v) == min_v);
+    BOOST_TEST(saturating_cast<int256>(int256{42}) == int256{42});
+
+    // A negative int256 saturating_cast to uint256 clamps to zero; a uint256
+    // beyond MAX saturating_cast to int256 clamps to MAX.
+    BOOST_TEST_EQ(saturating_cast<uint256>(min_v), uint256{});
+    BOOST_TEST_EQ(saturating_cast<uint256>(int256{-1}), uint256{});
+    // MAX (2^255 - 1) is positive and well within uint256's range, so the
+    // cast is exact, not a clamp.
+    BOOST_TEST_EQ(saturating_cast<uint256>(max_v),
+                  (uint256{UINT64_C(0x7FFFFFFFFFFFFFFF), UINT64_MAX, UINT64_MAX, UINT64_MAX}));
+    BOOST_TEST(saturating_cast<int256>(uint256_max()) == max_v);
+    BOOST_TEST(saturating_cast<int256>(uint256{42U}) == int256{42});
+}
+
+void test_signed_corpus_and_random()
+{
+    #ifndef BOOST_INT256_ORACLE_UNAVAILABLE
+    for (const auto& a : signed_edge_values())
+    {
+        for (const auto& b : signed_edge_values())
+        {
+            check_saturating_i(a, b);
+        }
+
+        if (boost::detail::test_errors() != 0)
+        {
+            return;
+        }
+    }
+
+    for (std::size_t i {0}; i < N; ++i)
+    {
+        check_saturating_i(random_int256(rng, shape::word4, sign::mixed),
+                           random_int256(rng, shape::word4, sign::mixed));
+
+        if (boost::detail::test_errors() != 0)
+        {
+            return;
+        }
+    }
+    #endif
+}
+
+void test_signed_constexpr()
+{
+    constexpr int256 min_v {INT64_MIN, UINT64_C(0), UINT64_C(0), UINT64_C(0)};
+    constexpr int256 max_v {INT64_MAX, UINT64_MAX, UINT64_MAX, UINT64_MAX};
+
+    static_assert(saturating_add(max_v, int256{1}) == max_v, "addition clamps at MAX");
+    static_assert(saturating_sub(min_v, int256{1}) == min_v, "subtraction clamps at MIN");
+    static_assert(saturating_mul(max_v, int256{2}) == max_v, "multiplication clamps at MAX");
+    static_assert(saturating_div(min_v, int256{-1}) == max_v, "MIN / -1 clamps to MAX");
+    static_assert(saturating_cast<int>(max_v) == (std::numeric_limits<int>::max)(), "the cast clamps");
+    static_assert(saturating_cast<int256>(uint256{UINT64_MAX, UINT64_MAX, UINT64_MAX, UINT64_MAX}) == max_v,
+                  "uint256 -> int256 clamps at MAX");
+}
+
 void test_constexpr()
 {
     constexpr uint256 max {UINT64_MAX, UINT64_MAX, UINT64_MAX, UINT64_MAX};
@@ -236,6 +413,11 @@ int main()
     test_clamps();
     test_saturating_cast();
     test_corpus_and_random();
+
+    test_signed_constexpr();
+    test_signed_clamps();
+    test_signed_saturating_cast();
+    test_signed_corpus_and_random();
 
     return boost::report_errors();
 }

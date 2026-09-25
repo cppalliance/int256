@@ -29,6 +29,11 @@ import boost.int256;
 #include <cstdint>
 #include <string>
 
+// This whole file exercises detail::from_chars directly (it IS the subject
+// under test, not an incidental helper call), and that detail entity is not
+// part of the module's exported interface, so the entire body is host-only.
+#ifndef BOOST_INT256_BUILD_MODULE
+
 using boost::int256::uint256;
 
 namespace
@@ -461,3 +466,14 @@ int main()
 
     return boost::report_errors();
 }
+
+#else
+
+int main()
+{
+    BOOST_TEST(true);
+
+    return boost::report_errors();
+}
+
+#endif // BOOST_INT256_BUILD_MODULE

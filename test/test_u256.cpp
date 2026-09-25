@@ -79,14 +79,16 @@ T expected_conversion(const uint256& v, std::true_type)
     return static_cast<T>(v.words[0]);
 }
 
-#if defined(BOOST_INT256_HAS_INT128)
+#if defined(BOOST_INT256_HAS_INT128) || defined(BOOST_INT256_HAS_MSVC_INT128)
 
 template <typename T>
 T expected_conversion(const uint256& v, std::false_type)
 {
-    using wide = boost::int256::detail::builtin_u128;
+    // Named builtin_wide, not wide, so it does not hide oracle.hpp's own
+    // (unrelated) file-scope wide alias under MSVC /W4 (C4459)
+    using builtin_wide = boost::int256::detail::builtin_u128;
 
-    const wide bits {(static_cast<wide>(v.words[1]) << 64) | static_cast<wide>(v.words[0])};
+    const builtin_wide bits {(static_cast<builtin_wide>(v.words[1]) << 64) | static_cast<builtin_wide>(v.words[0])};
 
     return static_cast<T>(bits);
 }
@@ -534,6 +536,10 @@ int main()
         unsigned long long
         #if defined(BOOST_INT256_HAS_INT128)
         , boost::int256::detail::builtin_i128
+        , boost::int256::detail::builtin_u128
+        #elif defined(BOOST_INT256_HAS_MSVC_INT128)
+        // std::_Signed128 is not compatible with Boost.Random, matching
+        // Boost.Int128's own test_types list on MSVC.
         , boost::int256::detail::builtin_u128
         #endif
     >;

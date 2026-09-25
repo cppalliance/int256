@@ -18,4 +18,11 @@ template<typename T> void test()
 void f1()
 {
     test<boost::int256::uint256>();
+
+// int256 is only forward declared until detail/int256_imp.hpp is wired into
+// int256.hpp; gated on that header's guard so this file keeps compiling before
+// and after it lands.
+#if defined(BOOST_INT256_DETAIL_INT256_IMP_HPP)
+    test<boost::int256::int256>();
+#endif
 }

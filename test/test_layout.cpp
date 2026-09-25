@@ -18,6 +18,14 @@
 
 using boost::int256::uint256;
 
+// int256 is only forward declared until detail/int256_imp.hpp is wired into
+// int256.hpp; every int256-specific check below is gated on that header's guard
+// so this file keeps compiling before and after it lands.
+#if defined(BOOST_INT256_DETAIL_INT256_IMP_HPP)
+#  define BOOST_INT256_TEST_HAS_SIGNED 1
+using boost::int256::int256;
+#endif
+
 namespace
 {
 
@@ -136,11 +144,99 @@ void test_value_initialization_and_copy()
     BOOST_TEST(restored == pattern);
 }
 
+#if defined(BOOST_INT256_TEST_HAS_SIGNED)
+
+// int256 mirrors uint256's layout exactly: four std::uint64_t words, words[0]
+// least significant, no padding, no over-alignment. The sign lives in bit 63 of
+// words[3] and is read back through signed_high().
+static_assert(std::is_same<std::remove_extent<decltype(int256{}.words)>::type, std::uint64_t>::value,
+              "int256::words must be an array of std::uint64_t");
+static_assert(std::extent<decltype(int256{}.words)>::value == 4,
+              "int256::words must hold exactly four words");
+
+static_assert(sizeof(int256) == 32, "int256 must be exactly 256 bits wide");
+static_assert(alignof(int256) == alignof(std::uint64_t),
+              "int256 must be naturally aligned, matching uint256");
+static_assert(alignof(int256) == alignof(uint256), "int256 and uint256 must agree on alignment");
+
+static_assert(std::is_trivially_copyable<int256>::value, "int256 must be trivially copyable");
+static_assert(std::is_standard_layout<int256>::value, "int256 must be standard layout");
+
+static_assert(std::is_same<decltype(int256{}.signed_high()), std::int64_t>::value,
+              "signed_high() must yield std::int64_t");
+
+// The four word constructor is most significant first, and the top word is
+// signed so int256{-1, 0, 0, 0} is well-formed.
+static_assert(int256{INT64_C(-1), UINT64_C(0), UINT64_C(0), UINT64_C(0)}.words[3] == UINT64_MAX,
+              "a negative top word sign extends into words[3]");
+static_assert(int256{INT64_C(1), UINT64_C(2), UINT64_C(3), UINT64_C(4)}.words[0] == UINT64_C(4),
+              "the last constructor argument is words[0]");
+static_assert(int256{INT64_C(1), UINT64_C(2), UINT64_C(3), UINT64_C(4)}.words[3] == UINT64_C(1),
+              "the first constructor argument is words[3]");
+
+// MIN and MAX round trip through signed_high() and the word layout.
+static_assert(int256{INT64_MIN, UINT64_C(0), UINT64_C(0), UINT64_C(0)}.signed_high() == INT64_MIN,
+              "signed_high reads back INT64_MIN");
+static_assert(int256{INT64_MAX, UINT64_MAX, UINT64_MAX, UINT64_MAX}.signed_high() == INT64_MAX,
+              "signed_high reads back INT64_MAX");
+
+// int256 and uint256 share a representation, so converting between them moves
+// no bits.
+void test_signed_word_order_and_conversion()
+{
+    const int256 v {INT64_C(-2), UINT64_C(0x0123456789ABCDEF), UINT64_C(0), UINT64_C(0)};
+
+    unsigned char from_object[sizeof(int256)] {};
+    std::memcpy(from_object, &v, sizeof(v));
+
+    unsigned char from_words[sizeof(int256)] {};
+    for (std::size_t i {0}; i < 4U; ++i)
+    {
+        std::memcpy(from_words + i * sizeof(std::uint64_t), &v.words[i], sizeof(std::uint64_t));
+    }
+
+    BOOST_TEST_EQ(std::memcmp(from_object, from_words, sizeof(int256)), 0);
+
+    const uint256 as_unsigned {v};
+    BOOST_TEST_EQ(as_unsigned.words[0], v.words[0]);
+    BOOST_TEST_EQ(as_unsigned.words[1], v.words[1]);
+    BOOST_TEST_EQ(as_unsigned.words[2], v.words[2]);
+    BOOST_TEST_EQ(as_unsigned.words[3], v.words[3]);
+
+    const int256 back {as_unsigned};
+    BOOST_TEST_EQ(back.words[0], v.words[0]);
+    BOOST_TEST_EQ(back.words[3], v.words[3]);
+}
+
+void test_signed_high_round_trip()
+{
+    const std::int64_t highs[] {
+        INT64_C(0), INT64_C(1), INT64_C(-1), INT64_C(2), INT64_C(-2),
+        INT64_MAX, INT64_MIN, INT64_MIN + 1, INT64_MAX - 1, INT64_C(-1000003)
+    };
+
+    for (const auto h : highs)
+    {
+        const int256 v {h, UINT64_C(0), UINT64_C(0), UINT64_C(0xDEADBEEFCAFEF00D)};
+
+        BOOST_TEST_EQ(v.signed_high(), h);
+        BOOST_TEST_EQ(v.words[3], static_cast<std::uint64_t>(h));
+        BOOST_TEST_EQ(v < 0, h < 0);
+    }
+}
+
+#endif // BOOST_INT256_TEST_HAS_SIGNED
+
 int main()
 {
     test_object_representation();
     test_word_significance();
     test_value_initialization_and_copy();
+
+#if defined(BOOST_INT256_TEST_HAS_SIGNED)
+    test_signed_word_order_and_conversion();
+    test_signed_high_round_trip();
+#endif
 
     return boost::report_errors();
 }

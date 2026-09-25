@@ -25,10 +25,14 @@ import boost.int256;
 
 #include <cstddef>
 #include <cstdint>
+#include <type_traits>
+#include <utility>
 
 using boost::int256::uint256;
 using boost::int256::div;
 using boost::int256::u256div_t;
+using boost::int256::int256;
+using boost::int256::i256div_t;
 
 namespace
 {
@@ -281,6 +285,141 @@ void test_knuth_directed_through_div()
     }
 }
 
+#ifndef BOOST_INT256_ORACLE_UNAVAILABLE
+
+void check_div_i(const int256& x, const int256& y)
+{
+    const auto result {div(x, y)};
+
+    const smp mx {to_smp(x)};
+    const smp my {to_smp(y)};
+
+    BOOST_TEST(result.quot == from_smp_wrapped(mx / my) ||
+               report_mismatch_i("i256div quotient", x, y, result.quot, mx / my));
+    BOOST_TEST(result.rem == from_smp_wrapped(mx % my) ||
+               report_mismatch_i("i256div remainder", x, y, result.rem, mx % my));
+
+    // The identity, independent of the reference.
+    BOOST_TEST(result.quot * y + result.rem == x);
+
+    // div must agree with the operators.
+    BOOST_TEST(result.quot == x / y);
+    BOOST_TEST(result.rem == x % y);
+}
+
+// The quotient's sign is sign(x) != sign(y); the remainder takes the sign of
+// the dividend. MIN as either operand is exercised explicitly: MIN / -1 wraps
+// back to MIN (the mathematical quotient 2^255 is not representable), and a
+// small dividend against MIN as the divisor is the int128 defect A shape
+// (a careless abs(MIN) that is still MIN must not divide by a zero
+// intermediate).
+void test_signed_directed_identities()
+{
+    constexpr int256 min_v {INT64_MIN, UINT64_C(0), UINT64_C(0), UINT64_C(0)};
+    constexpr int256 max_v {INT64_MAX, UINT64_MAX, UINT64_MAX, UINT64_MAX};
+
+    {
+        const auto r {div(min_v, int256{-1})};
+        BOOST_TEST(r.quot == min_v);
+        BOOST_TEST(r.rem == int256{0});
+    }
+    {
+        const auto r {div(max_v, int256{-1})};
+        BOOST_TEST(r.quot == -max_v);
+        BOOST_TEST(r.rem == int256{0});
+    }
+    {
+        const auto r {div(int256{-7}, int256{2})};
+        BOOST_TEST(r.quot == int256{-3});
+        BOOST_TEST(r.rem == int256{-1});
+    }
+    {
+        const auto r {div(int256{7}, int256{-2})};
+        BOOST_TEST(r.quot == int256{-3});
+        BOOST_TEST(r.rem == int256{1});
+    }
+    {
+        const auto r {div(int256{-7}, int256{-2})};
+        BOOST_TEST(r.quot == int256{3});
+        BOOST_TEST(r.rem == int256{-1});
+    }
+
+    // A small dividend divided by MIN: quotient 0, remainder the dividend.
+    const int256 small_dividends[] {
+        int256{0}, int256{1}, int256{-1}, int256{5}, int256{-5}, int256{INT64_MAX}, int256{INT64_MIN + 1}
+    };
+    for (const auto& d : small_dividends)
+    {
+        const auto r {div(d, min_v)};
+        BOOST_TEST(r.quot == int256{0});
+        BOOST_TEST(r.rem == d);
+    }
+
+    // MIN against itself: quotient 1, remainder 0.
+    {
+        const auto r {div(min_v, min_v)};
+        BOOST_TEST(r.quot == int256{1});
+        BOOST_TEST(r.rem == int256{0});
+    }
+}
+
+void test_signed_corpus()
+{
+    for (const auto& x : signed_edge_values())
+    {
+        for (const auto& y : signed_edge_values())
+        {
+            if (y != 0)
+            {
+                check_div_i(x, y);
+            }
+        }
+
+        if (boost::detail::test_errors() != 0)
+        {
+            return;
+        }
+    }
+}
+
+void test_signed_random()
+{
+    for (std::size_t i {0}; i < N; ++i)
+    {
+        const int256 x {random_int256(rng, shape::word4, sign::mixed)};
+        const int256 y {random_int256(rng, shape::word4, sign::mixed)};
+
+        if (y != 0)
+        {
+            check_div_i(x, y);
+        }
+
+        if (boost::detail::test_errors() != 0)
+        {
+            return;
+        }
+    }
+}
+
+#endif // BOOST_INT256_ORACLE_UNAVAILABLE
+
+// i256div_t is the same shape as u256div_t, with int256 members.
+void test_signed_struct_shape()
+{
+    static_assert(std::is_same<decltype(std::declval<i256div_t>().quot), int256>::value, "quot is int256");
+    static_assert(std::is_same<decltype(std::declval<i256div_t>().rem), int256>::value, "rem is int256");
+}
+
+// div is usable in a constant expression for int256 too.
+void test_signed_constexpr()
+{
+    constexpr int256 min_v {INT64_MIN, UINT64_C(0), UINT64_C(0), UINT64_C(0)};
+    constexpr auto result {div(min_v, int256{-1})};
+
+    static_assert(result.quot == min_v, "MIN / -1 wraps to MIN at compile time");
+    static_assert(result.rem == int256{0}, "MIN % -1 == 0 at compile time");
+}
+
 // div is usable in a constant expression, which routes through Algorithm D.
 void test_constexpr()
 {
@@ -308,6 +447,15 @@ int main()
     #ifndef BOOST_INT256_ORACLE_UNAVAILABLE
     test_corpus();
     test_divisor_classes();
+    #endif
+
+    test_signed_struct_shape();
+    test_signed_constexpr();
+
+    #ifndef BOOST_INT256_ORACLE_UNAVAILABLE
+    test_signed_directed_identities();
+    test_signed_corpus();
+    test_signed_random();
     #endif
 
     return boost::report_errors();

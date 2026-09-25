@@ -32,6 +32,14 @@ int main()
 
 using boost::int256::uint256;
 
+// int256 is only forward declared until detail/int256_imp.hpp is wired into
+// int256.hpp; the int256-RHS sections below are gated on
+// BOOST_INT256_TEST_HAS_SIGNED so this file keeps compiling before and after
+// it lands.
+#if defined(BOOST_INT256_TEST_HAS_SIGNED)
+using boost::int256::int256;
+#endif
+
 namespace
 {
 
@@ -225,6 +233,154 @@ void test_directed_truncation()
     }
 }
 
+#if defined(BOOST_INT256_TEST_HAS_SIGNED)
+
+bool report_compound_i(const char* what, const int256& rhs)
+{
+    std::cerr << "int256 compound assignment mismatch in " << what << '\n'
+              << "  rhs = " << hex_words(rhs) << std::endl;
+
+    return false;
+}
+
+// The int256-RHS twin of test_return_types: Integer& operator@=(Integer&,
+// const int256&).
+template <typename T>
+void test_return_types_i()
+{
+    static_assert(std::is_same<decltype(std::declval<T&>() += std::declval<const int256&>()), T&>::value, "+=");
+    static_assert(std::is_same<decltype(std::declval<T&>() -= std::declval<const int256&>()), T&>::value, "-=");
+    static_assert(std::is_same<decltype(std::declval<T&>() *= std::declval<const int256&>()), T&>::value, "*=");
+    static_assert(std::is_same<decltype(std::declval<T&>() /= std::declval<const int256&>()), T&>::value, "/=");
+    static_assert(std::is_same<decltype(std::declval<T&>() %= std::declval<const int256&>()), T&>::value, "%=");
+    static_assert(std::is_same<decltype(std::declval<T&>() &= std::declval<const int256&>()), T&>::value, "&=");
+    static_assert(std::is_same<decltype(std::declval<T&>() |= std::declval<const int256&>()), T&>::value, "|=");
+    static_assert(std::is_same<decltype(std::declval<T&>() ^= std::declval<const int256&>()), T&>::value, "^=");
+    static_assert(std::is_same<decltype(std::declval<T&>() <<= std::declval<const int256&>()), T&>::value, "<<=");
+    static_assert(std::is_same<decltype(std::declval<T&>() >>= std::declval<const int256&>()), T&>::value, ">>=");
+}
+
+template <typename T>
+void test_arithmetic_and_bitwise_i()
+{
+    for (std::size_t i {0}; i < N; ++i)
+    {
+        const auto original {draw<T>()};
+        const int256 rhs {random_int256(rng, shape::word4, sign::mixed)};
+
+        {
+            T lhs {original};
+            lhs += rhs;
+            BOOST_TEST(lhs == static_cast<T>(original + rhs) || report_compound_i("operator+=", rhs));
+        }
+        {
+            T lhs {original};
+            lhs -= rhs;
+            BOOST_TEST(lhs == static_cast<T>(original - rhs) || report_compound_i("operator-=", rhs));
+        }
+        {
+            T lhs {original};
+            lhs *= rhs;
+            BOOST_TEST(lhs == static_cast<T>(original * rhs) || report_compound_i("operator*=", rhs));
+        }
+        {
+            T lhs {original};
+            lhs &= rhs;
+            BOOST_TEST(lhs == static_cast<T>(original & rhs) || report_compound_i("operator&=", rhs));
+        }
+        {
+            T lhs {original};
+            lhs |= rhs;
+            BOOST_TEST(lhs == static_cast<T>(original | rhs) || report_compound_i("operator|=", rhs));
+        }
+        {
+            T lhs {original};
+            lhs ^= rhs;
+            BOOST_TEST(lhs == static_cast<T>(original ^ rhs) || report_compound_i("operator^=", rhs));
+        }
+        if (rhs != 0)
+        {
+            T lhs {original};
+            lhs /= rhs;
+            BOOST_TEST(lhs == static_cast<T>(original / rhs) || report_compound_i("operator/=", rhs));
+
+            T other {original};
+            other %= rhs;
+            BOOST_TEST(other == static_cast<T>(original % rhs) || report_compound_i("operator%=", rhs));
+        }
+
+        if (boost::detail::test_errors() != 0)
+        {
+            return;
+        }
+    }
+}
+
+template <typename T>
+void test_shifts_i()
+{
+    using promoted = typename boost::int256::detail::promoted<T>::type;
+    constexpr auto promoted_bits {static_cast<unsigned>(sizeof(promoted) * 8U)};
+
+    for (unsigned count {0}; count < promoted_bits; ++count)
+    {
+        const auto original {draw<T>()};
+        const int256 rhs {INT64_C(0), UINT64_C(0), UINT64_C(0), count};
+
+        {
+            T lhs {original};
+            lhs <<= rhs;
+            BOOST_TEST(lhs == static_cast<T>(original << rhs) || report_compound_i("operator<<=", rhs));
+        }
+        {
+            T lhs {original};
+            lhs >>= rhs;
+            BOOST_TEST(lhs == static_cast<T>(original >> rhs) || report_compound_i("operator>>=", rhs));
+        }
+
+        if (boost::detail::test_errors() != 0)
+        {
+            return;
+        }
+    }
+}
+
+void test_directed_truncation_i()
+{
+    {
+        // 2^64 truncates to zero in a 64-bit target.
+        std::uint64_t lhs {0};
+        lhs += int256(INT64_C(0), UINT64_C(0), UINT64_C(1), UINT64_C(0));
+        BOOST_TEST_EQ(lhs, UINT64_C(0));
+    }
+    {
+        // A negative int256 truncates the same as its unsigned bit pattern.
+        std::uint64_t lhs {0};
+        lhs += int256{-1};
+        BOOST_TEST_EQ(lhs, UINT64_MAX);
+    }
+    {
+        // A count of 63 shifts a 64-bit value nearly out entirely.
+        std::uint64_t wide {UINT64_C(1) << 63};
+        wide >>= int256{63};
+        BOOST_TEST_EQ(wide, UINT64_C(1));
+    }
+    {
+        // Division by a value wider than the dividend gives zero.
+        std::uint64_t lhs {UINT64_MAX};
+        lhs /= int256(INT64_C(0), UINT64_C(0), UINT64_C(1), UINT64_C(0));
+        BOOST_TEST_EQ(lhs, UINT64_C(0));
+    }
+    {
+        // The result is written back, so a chain sees the updated value.
+        std::uint64_t lhs {1};
+        (lhs += int256{2}) += int256{3};
+        BOOST_TEST_EQ(lhs, UINT64_C(6));
+    }
+}
+
+#endif // BOOST_INT256_TEST_HAS_SIGNED
+
 struct test_caller
 {
     template <typename T>
@@ -233,6 +389,12 @@ struct test_caller
         test_return_types<T>();
         test_arithmetic_and_bitwise<T>();
         test_shifts<T>();
+
+#if defined(BOOST_INT256_TEST_HAS_SIGNED)
+        test_return_types_i<T>();
+        test_arithmetic_and_bitwise_i<T>();
+        test_shifts_i<T>();
+#endif
     }
 };
 
@@ -256,6 +418,10 @@ int main()
     boost::mp11::mp_for_each<test_types>(test_caller());
 
     test_directed_truncation();
+
+#if defined(BOOST_INT256_TEST_HAS_SIGNED)
+    test_directed_truncation_i();
+#endif
 
     return boost::report_errors();
 }

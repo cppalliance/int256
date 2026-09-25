@@ -14,6 +14,7 @@
 #include <string>
 
 using boost::int256::uint256;
+using boost::int256::int256;
 using boost::int256::to_string;
 using boost::int256::to_wstring;
 
@@ -105,6 +106,93 @@ void test_constraint()
                   "to_string returns a std::string");
     static_assert(std::is_same<decltype(to_wstring(uint256{})), std::wstring>::value,
                   "to_wstring returns a std::wstring");
+    static_assert(std::is_same<decltype(to_string(int256{})), std::string>::value,
+                  "to_string(int256) returns a std::string");
+    static_assert(std::is_same<decltype(to_wstring(int256{})), std::wstring>::value,
+                  "to_wstring(int256) returns a std::wstring");
+}
+
+void test_signed_known_answers()
+{
+    BOOST_TEST_EQ(to_string(int256{}), std::string{"0"});
+    BOOST_TEST_EQ(to_string(int256{1}), std::string{"1"});
+    BOOST_TEST_EQ(to_string(int256{-1}), std::string{"-1"});
+    BOOST_TEST_EQ(to_string(int256{-42}), std::string{"-42"});
+
+    constexpr int256 min_v {INT64_MIN, UINT64_C(0), UINT64_C(0), UINT64_C(0)};
+    constexpr int256 max_v {INT64_MAX, UINT64_MAX, UINT64_MAX, UINT64_MAX};
+    BOOST_TEST_EQ(to_string(min_v),
+                  std::string{"-57896044618658097711785492504343953926634992332820282019728792003956564819968"});
+    BOOST_TEST_EQ(to_string(max_v),
+                  std::string{"57896044618658097711785492504343953926634992332820282019728792003956564819967"});
+
+    // No leading zeros (other than a bare "0"), and the sign is the very
+    // first character for a negative value.
+    const int256 one {INT64_C(0), UINT64_C(0), UINT64_C(0), UINT64_C(1)};
+    for (unsigned k {0}; k < 255U; ++k)
+    {
+        const auto positive_text {to_string(one << k)};
+        BOOST_TEST(!positive_text.empty());
+        BOOST_TEST(positive_text[0] != '0');
+
+        const auto negative_text {to_string(-(one << k))};
+        BOOST_TEST(!negative_text.empty());
+        BOOST_TEST(negative_text[0] == '-');
+        BOOST_TEST(negative_text[1] != '0');
+    }
+}
+
+void test_signed_wide_matches_narrow()
+{
+    const int256 values[] {
+        int256{}, int256{1}, int256{-1}, int256{42}, int256{-42},
+        int256(INT64_MIN, UINT64_C(0), UINT64_C(0), UINT64_C(0)),
+        int256(INT64_MAX, UINT64_MAX, UINT64_MAX, UINT64_MAX)
+    };
+
+    for (const auto& v : values)
+    {
+        BOOST_TEST(to_wstring(v) == widen_string(to_string(v)));
+    }
+}
+
+void test_signed_against_reference()
+{
+    for (const auto& v : signed_edge_values())
+    {
+        // The sign has to be checked and rendered separately from the
+        // magnitude, since mp_str (like to_mp) only knows uint256.
+        const bool negative {v.signed_high() < 0};
+        const uint256 magnitude {to_unsigned_bits(negative ? -v : v)};
+        const auto expected_text {(negative ? std::string{"-"} : std::string{}) +
+                                   mp_str(to_mp(magnitude), 10, false)};
+
+        BOOST_TEST_EQ(to_string(v), expected_text);
+        BOOST_TEST(to_wstring(v) == widen_string(expected_text));
+    }
+
+    for (std::size_t i {0}; i < N; ++i)
+    {
+        for (const auto s : all_shapes())
+        {
+            for (const auto sg : {sign::pos, sign::neg, sign::mixed})
+            {
+                const int256 v {random_int256(rng, s, sg)};
+
+                const bool negative {v.signed_high() < 0};
+                const uint256 magnitude {to_unsigned_bits(negative ? -v : v)};
+                const auto expected_text {(negative ? std::string{"-"} : std::string{}) +
+                                           mp_str(to_mp(magnitude), 10, false)};
+
+                BOOST_TEST_EQ(to_string(v), expected_text);
+            }
+        }
+
+        if (boost::detail::test_errors() != 0)
+        {
+            return;
+        }
+    }
 }
 
 } // namespace
@@ -115,6 +203,10 @@ int main()
     test_known_answers();
     test_wide_matches_narrow();
     test_against_reference();
+
+    test_signed_known_answers();
+    test_signed_wide_matches_narrow();
+    test_signed_against_reference();
 
     return boost::report_errors();
 }

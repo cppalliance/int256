@@ -29,12 +29,21 @@ import boost.int256;
 using boost::int256::uint256;
 using boost::int256::isqrt;
 
+#if defined(BOOST_INT256_TEST_HAS_SIGNED)
+using boost::int256::int256;
+#endif
+
 namespace
 {
 
 std::mt19937_64 rng {42};
 
 constexpr uint256 one {UINT64_C(0), UINT64_C(0), UINT64_C(0), UINT64_C(1)};
+
+#if defined(BOOST_INT256_TEST_HAS_SIGNED)
+constexpr int256 min_i {INT64_MIN, UINT64_C(0), UINT64_C(0), UINT64_C(0)};
+constexpr int256 max_i {INT64_MAX, UINT64_MAX, UINT64_MAX, UINT64_MAX};
+#endif
 
 // The bracketing property, which fully determines the answer.
 void check_isqrt(const uint256& n)
@@ -188,6 +197,124 @@ void test_constexpr()
                   "the root of the maximum is 2^128 - 1");
 }
 
+#if defined(BOOST_INT256_TEST_HAS_SIGNED)
+
+//=====================================
+// int256: a negative input returns 0; a non-negative one runs the exact same
+// bracketing algorithm as the unsigned overload, on the exact same bit
+// pattern, so the interesting cases are all about the sign boundary
+//=====================================
+
+void check_isqrt_i(const int256& n)
+{
+    const auto r {isqrt(n)};
+
+    if (n.signed_high() < 0)
+    {
+        BOOST_TEST(r == int256{});
+        return;
+    }
+
+    // A non-negative input's root is never negative: it is at most the root
+    // of MAX, far below the sign bit.
+    BOOST_TEST(r >= int256{});
+
+    #ifndef BOOST_INT256_ORACLE_UNAVAILABLE
+    const smp root {to_smp(r)};
+    const smp value {to_smp(n)};
+
+    const bool lower_ok {root * root <= value};
+    const bool upper_ok {(root + 1) * (root + 1) > value};
+
+    if (!lower_ok || !upper_ok)
+    {
+        std::cerr << "int256 isqrt out of bracket\n"
+                  << "  n    = " << hex_words(n) << '\n'
+                  << "  root = " << hex_words(r) << std::endl;
+    }
+
+    BOOST_TEST(lower_ok);
+    BOOST_TEST(upper_ok);
+    #endif
+}
+
+void test_known_answers_i()
+{
+    BOOST_TEST(isqrt(int256{}) == int256{});
+    BOOST_TEST(isqrt(int256{1}) == int256{1});
+    BOOST_TEST(isqrt(int256{4}) == int256{2});
+    BOOST_TEST(isqrt(int256{15}) == int256{3});
+    BOOST_TEST(isqrt(int256{16}) == int256{4});
+    BOOST_TEST(isqrt(int256{99}) == int256{9});
+    BOOST_TEST(isqrt(int256{100}) == int256{10});
+
+    // Every negative input, whatever its magnitude, returns 0.
+    BOOST_TEST(isqrt(int256{-1}) == int256{});
+    BOOST_TEST(isqrt(int256{-4}) == int256{});
+    BOOST_TEST(isqrt(int256{-100}) == int256{});
+    BOOST_TEST(isqrt(min_i) == int256{});
+
+    // MAX: its root is floor(sqrt(2^255 - 1)).
+    check_isqrt_i(max_i);
+}
+
+// Perfect squares, and the values either side of them, restricted to the
+// non-negative half of the range (everything below zero is already pinned
+// to 0 above).
+void test_perfect_squares_i()
+{
+    for (unsigned k {0}; k < 127U; ++k)
+    {
+        const int256 square {static_cast<int256>(one << (2U * k))};
+        BOOST_TEST(isqrt(square) == static_cast<int256>(one << k));
+
+        if (k > 0U)
+        {
+            BOOST_TEST(isqrt(square - 1) == static_cast<int256>((one << k) - 1U));
+        }
+
+        BOOST_TEST(isqrt(square + 1) == static_cast<int256>(one << k));
+
+        if (boost::detail::test_errors() != 0)
+        {
+            return;
+        }
+    }
+}
+
+void test_corpus_and_random_i()
+{
+    for (const auto& v : signed_edge_values())
+    {
+        check_isqrt_i(v);
+    }
+
+    for (std::size_t i {0}; i < N; ++i)
+    {
+        check_isqrt_i(random_int256(rng, shape::word4, sign::mixed));
+        check_isqrt_i(random_int256(rng, shape::word4, sign::pos));
+        check_isqrt_i(random_int256(rng, shape::word4, sign::neg));
+
+        if (boost::detail::test_errors() != 0)
+        {
+            return;
+        }
+    }
+}
+
+void test_constexpr_i()
+{
+    static_assert(isqrt(int256{}) == int256{}, "isqrt(0)");
+    static_assert(isqrt(int256{15}) == int256{3}, "isqrt(15)");
+    static_assert(isqrt(int256{16}) == int256{4}, "isqrt(16)");
+    static_assert(isqrt(int256{-1}) == int256{}, "a negative input gives 0");
+    static_assert(isqrt(min_i) == int256{}, "MIN gives 0 too");
+    static_assert(isqrt(max_i) == static_cast<int256>(isqrt(static_cast<uint256>(max_i))),
+                  "MAX matches the unsigned root of its own bit pattern");
+}
+
+#endif // BOOST_INT256_TEST_HAS_SIGNED
+
 } // namespace
 
 int main()
@@ -197,6 +324,13 @@ int main()
     test_perfect_squares();
     test_powers_of_two_minus_one();
     test_corpus_and_random();
+
+    #if defined(BOOST_INT256_TEST_HAS_SIGNED)
+    test_constexpr_i();
+    test_known_answers_i();
+    test_perfect_squares_i();
+    test_corpus_and_random_i();
+    #endif
 
     return boost::report_errors();
 }

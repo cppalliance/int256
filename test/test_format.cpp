@@ -27,6 +27,10 @@ int main()
 
 using boost::int256::uint256;
 
+#if defined(BOOST_INT256_TEST_HAS_SIGNED)
+using boost::int256::int256;
+#endif
+
 namespace
 {
 
@@ -171,6 +175,140 @@ void test_mixed_arguments()
     BOOST_TEST_EQ(std::format("{1} {0}", uint256{1U}, uint256{2U}), std::string{"2 1"});
 }
 
+#if defined(BOOST_INT256_TEST_HAS_SIGNED)
+
+//=====================================
+// int256: the sign is printed before any base prefix ("-0xff", never
+// "0x-ff", the int128 defect the contract calls out), and it is always
+// present for a negative value regardless of the sign option
+//=====================================
+
+constexpr int256 min_i {INT64_MIN, UINT64_C(0), UINT64_C(0), UINT64_C(0)};
+constexpr int256 max_i {INT64_MAX, UINT64_MAX, UINT64_MAX, UINT64_MAX};
+
+// The magnitude, rendered through the already-verified unsigned path, with
+// the sign prepended separately: abs(MIN) is exact (it wraps back to MIN's
+// own bit pattern, whose magnitude to_unsigned_bits reports correctly), so
+// this needs no special case for it.
+std::string signed_mp_str(const int256& v, int base, bool uppercase)
+{
+    const bool negative {v.signed_high() < 0};
+    const auto magnitude {to_unsigned_bits(boost::int256::abs(v))};
+    const auto digits {mp_str(to_mp(magnitude), base, uppercase)};
+
+    return negative ? std::string{"-"} + digits : digits;
+}
+
+void test_presentation_types_i()
+{
+    const int256 v {-255};
+
+    BOOST_TEST_EQ(std::format("{}", v), std::string{"-255"});
+    BOOST_TEST_EQ(std::format("{:d}", v), std::string{"-255"});
+    BOOST_TEST_EQ(std::format("{:x}", v), std::string{"-ff"});
+    BOOST_TEST_EQ(std::format("{:X}", v), std::string{"-FF"});
+    BOOST_TEST_EQ(std::format("{:#x}", v), std::string{"-0xff"});
+    BOOST_TEST_EQ(std::format("{:#X}", v), std::string{"-0XFF"});
+    BOOST_TEST_EQ(std::format("{:b}", v), std::string{"-11111111"});
+    BOOST_TEST_EQ(std::format("{:#b}", v), std::string{"-0b11111111"});
+    BOOST_TEST_EQ(std::format("{:o}", v), std::string{"-377"});
+    BOOST_TEST_EQ(std::format("{:#o}", v), std::string{"-0377"});
+
+    // A positive value looks exactly like the unsigned case.
+    BOOST_TEST_EQ(std::format("{}", int256{255}), std::string{"255"});
+    BOOST_TEST_EQ(std::format("{:#x}", int256{255}), std::string{"0xff"});
+
+    // Zero has no sign in any presentation type.
+    BOOST_TEST_EQ(std::format("{}", int256{}), std::string{"0"});
+    BOOST_TEST_EQ(std::format("{:#x}", int256{}), std::string{"0x0"});
+    BOOST_TEST_EQ(std::format("{:#o}", int256{}), std::string{"0"});
+}
+
+void test_the_extremes_i()
+{
+    BOOST_TEST_EQ(std::format("{}", min_i), signed_mp_str(min_i, 10, false));
+    BOOST_TEST_EQ(std::format("{}", max_i), signed_mp_str(max_i, 10, false));
+
+    // MIN's magnitude (2^255) and MAX's (2^255 - 1) have the same digit
+    // count, so MIN's decimal string is exactly one character longer than
+    // MAX's: the sign.
+    BOOST_TEST_EQ(std::format("{}", min_i).size(), std::format("{}", max_i).size() + 1U);
+
+    BOOST_TEST_EQ(std::format("{:x}", min_i), signed_mp_str(min_i, 16, false));
+    BOOST_TEST_EQ(std::format("{:b}", min_i), signed_mp_str(min_i, 2, false));
+    BOOST_TEST_EQ(std::format("{:o}", min_i), signed_mp_str(min_i, 8, false));
+
+    // MIN in hex is a sign, "0x", and 64 hex digits (2^255 is 64 hex digits,
+    // one bit into the 64th), matching the top bit pattern.
+    BOOST_TEST_EQ(std::format("{:#x}", min_i), std::string{"-0x8"} + std::string(63, '0'));
+}
+
+void test_width_fill_and_align_i()
+{
+    // Zero padding through the sign-aware form: the sign is part of the
+    // content and the zeros go after it, exactly like a builtin int.
+    BOOST_TEST_EQ(std::format("{:06}", int256{-42}), std::string{"-00042"});
+    BOOST_TEST_EQ(std::format("{:+06}", int256{42}), std::string{"+00042"});
+    BOOST_TEST_EQ(std::format("{:#08x}", int256{-255}), std::string{"-0x000ff"});
+
+    // An explicit + or space never overrides an actual negative sign.
+    BOOST_TEST_EQ(std::format("{:+}", int256{-5}), std::string{"-5"});
+    BOOST_TEST_EQ(std::format("{: }", int256{-5}), std::string{"-5"});
+
+    // Alignment treats the sign as part of the content, not something to pad
+    // around.
+    BOOST_TEST_EQ(std::format("{:>8}", int256{-42}), std::string{"     -42"});
+    BOOST_TEST_EQ(std::format("{:<8}", int256{-42}), std::string{"-42     "});
+    BOOST_TEST_EQ(std::format("{:*^8}", int256{-42}), std::string{"**-42***"});
+}
+
+void test_sign_options_i()
+{
+    BOOST_TEST_EQ(std::format("{:+}", int256{42}), std::string{"+42"});
+    BOOST_TEST_EQ(std::format("{:+}", int256{-42}), std::string{"-42"});
+    BOOST_TEST_EQ(std::format("{:+}", int256{}), std::string{"+0"});
+    BOOST_TEST_EQ(std::format("{: }", int256{42}), std::string{" 42"});
+    BOOST_TEST_EQ(std::format("{: }", int256{-42}), std::string{"-42"});
+    BOOST_TEST_EQ(std::format("{:-}", int256{42}), std::string{"42"});
+    BOOST_TEST_EQ(std::format("{:-}", int256{-42}), std::string{"-42"});
+}
+
+void test_against_reference_i()
+{
+    for (const auto& v : signed_edge_values())
+    {
+        BOOST_TEST_EQ(std::format("{}", v), signed_mp_str(v, 10, false));
+        BOOST_TEST_EQ(std::format("{:x}", v), signed_mp_str(v, 16, false));
+        BOOST_TEST_EQ(std::format("{:X}", v), signed_mp_str(v, 16, true));
+        BOOST_TEST_EQ(std::format("{:o}", v), signed_mp_str(v, 8, false));
+        BOOST_TEST_EQ(std::format("{:b}", v), signed_mp_str(v, 2, false));
+    }
+
+    for (std::size_t i {0}; i < N; ++i)
+    {
+        const auto v {random_int256(rng, shape::word4, sign::mixed)};
+
+        BOOST_TEST_EQ(std::format("{}", v), signed_mp_str(v, 10, false));
+        BOOST_TEST_EQ(std::format("{:x}", v), signed_mp_str(v, 16, false));
+        BOOST_TEST_EQ(std::format("{:b}", v), signed_mp_str(v, 2, false));
+
+        if (boost::detail::test_errors() != 0)
+        {
+            return;
+        }
+    }
+}
+
+void test_mixed_arguments_i()
+{
+    BOOST_TEST_EQ(std::format("{} and {}", int256{-1}, int256{2}), std::string{"-1 and 2"});
+    BOOST_TEST_EQ(std::format("{}:{:x}", int256{-255}, int256{255}), std::string{"-255:ff"});
+    BOOST_TEST_EQ(std::format("{} {} {}", 1, int256{-2}, "three"), std::string{"1 -2 three"});
+    BOOST_TEST_EQ(std::format("{1} {0}", int256{-1}, uint256{2U}), std::string{"2 -1"});
+}
+
+#endif // BOOST_INT256_TEST_HAS_SIGNED
+
 } // namespace
 
 int main()
@@ -181,6 +319,15 @@ int main()
     test_sign_options();
     test_mixed_arguments();
     test_against_reference();
+
+    #if defined(BOOST_INT256_TEST_HAS_SIGNED)
+    test_presentation_types_i();
+    test_the_extremes_i();
+    test_width_fill_and_align_i();
+    test_sign_options_i();
+    test_mixed_arguments_i();
+    test_against_reference_i();
+    #endif
 
     return boost::report_errors();
 }

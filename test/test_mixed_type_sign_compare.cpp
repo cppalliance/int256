@@ -143,6 +143,59 @@ void test_random_mixed_comparisons()
     }
 }
 
+#if defined(BOOST_INT256_TEST_HAS_SIGNED)
+
+// int256 meeting uint256 also goes through the usual arithmetic conversions:
+// both become uint256, so int256{-1} < uint256{1} is false, exactly like
+// int128{-1} < uint128{1}.
+void test_int256_uint256_pinned_semantics()
+{
+    const int256 minus_one {-1};
+    const uint256 one_u {1U};
+
+    BOOST_TEST(!(minus_one < one_u));
+    BOOST_TEST(minus_one > one_u);
+    BOOST_TEST(minus_one != one_u);
+    BOOST_TEST(one_u < minus_one);
+
+    const uint256 max_u {uint256_max()};
+    BOOST_TEST(minus_one == max_u);
+    BOOST_TEST(max_u == minus_one);
+}
+
+void test_int256_uint256_random_comparisons()
+{
+    for (std::size_t i {0}; i < N; ++i)
+    {
+        const int256 lhs {random_int256(rng, shape::word4, sign::mixed)};
+        const uint256 rhs {random_uint256(rng, shape::word4)};
+
+        const mp mlhs {to_mp(to_unsigned_bits(lhs))};
+        const mp mrhs {to_mp(rhs)};
+
+        BOOST_TEST_EQ(lhs == rhs, mlhs == mrhs);
+        BOOST_TEST_EQ(lhs != rhs, mlhs != mrhs);
+        BOOST_TEST_EQ(lhs <  rhs, mlhs <  mrhs);
+        BOOST_TEST_EQ(lhs <= rhs, mlhs <= mrhs);
+        BOOST_TEST_EQ(lhs >  rhs, mlhs >  mrhs);
+        BOOST_TEST_EQ(lhs >= rhs, mlhs >= mrhs);
+
+        BOOST_TEST_EQ(rhs == lhs, mrhs == mlhs);
+        BOOST_TEST_EQ(rhs != lhs, mrhs != mlhs);
+        BOOST_TEST_EQ(rhs <  lhs, mrhs <  mlhs);
+        BOOST_TEST_EQ(rhs <= lhs, mrhs <= mlhs);
+        BOOST_TEST_EQ(rhs >  lhs, mrhs >  mlhs);
+        BOOST_TEST_EQ(rhs >= lhs, mrhs >= mlhs);
+
+        if (boost::detail::test_errors() != 0)
+        {
+            return;
+        }
+    }
+}
+
+#endif // BOOST_INT256_TEST_HAS_SIGNED
+
 } // namespace
 
 int main()
@@ -151,6 +204,11 @@ int main()
     test_sign_extension_into_every_word();
     test_narrow_signed_operands();
     test_random_mixed_comparisons();
+
+#if defined(BOOST_INT256_TEST_HAS_SIGNED)
+    test_int256_uint256_pinned_semantics();
+    test_int256_uint256_random_comparisons();
+#endif
 
     return boost::report_errors();
 }

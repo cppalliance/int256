@@ -19,6 +19,12 @@
 // The four words are drawn into named locals first because the order in which
 // function arguments are evaluated is unspecified, and a reproducible sequence
 // from a fixed seed is what makes a failure re-runnable.
+//
+// Signed-aware: T's 4-word constructor takes the top word as std::int64_t (so that
+// int256{-1, 0, 0, 0} works), but w3 here is drawn as std::uint64_t. Calling the
+// constructor with parentheses instead of braces uses ordinary function-call argument
+// conversion for w3 instead of list-initialization, which would otherwise reject the
+// unsigned-to-signed conversion as narrowing. This works identically for uint256.
 template <typename T>
 T random_value(std::mt19937_64& rng)
 {
@@ -27,7 +33,7 @@ T random_value(std::mt19937_64& rng)
     const auto w1 {static_cast<std::uint64_t>(rng())};
     const auto w0 {static_cast<std::uint64_t>(rng())};
 
-    return T{w3, w2, w1, w0};
+    return T(w3, w2, w1, w0);
 }
 
 // Returns a divisor that is never zero so division stays well defined. Applied

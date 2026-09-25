@@ -15,6 +15,14 @@
 
 using boost::int256::uint256;
 
+// int256 is only forward declared until detail/int256_imp.hpp is wired into
+// int256.hpp; the section below is gated on that header's guard so this file
+// keeps compiling before and after it lands.
+#if defined(BOOST_INT256_DETAIL_INT256_IMP_HPP)
+#  define BOOST_INT256_TEST_HAS_SIGNED 1
+using boost::int256::int256;
+#endif
+
 namespace
 {
 
@@ -47,7 +55,95 @@ uint256 opaque(uint256 v)
     return uint256{opaque(v.words[3]), opaque(v.words[2]), opaque(v.words[1]), opaque(v.words[0])};
 }
 
+#if defined(BOOST_INT256_TEST_HAS_SIGNED)
+
+int256 opaque(int256 v)
+{
+    return int256{static_cast<std::int64_t>(opaque(v.words[3])), opaque(v.words[2]), opaque(v.words[1]), opaque(v.words[0])};
+}
+
+#endif
+
 } // namespace
+
+#if defined(BOOST_INT256_TEST_HAS_SIGNED)
+
+void test_signed_boundaries()
+{
+    const auto min_v {opaque(int256{INT64_MIN, UINT64_C(0), UINT64_C(0), UINT64_C(0)})};
+    const auto max_v {opaque(int256{INT64_MAX, UINT64_MAX, UINT64_MAX, UINT64_MAX})};
+    const auto zero {opaque(int256{})};
+    const auto one {opaque(int256{INT64_C(0), UINT64_C(0), UINT64_C(0), UINT64_C(1)})};
+    const auto minus_one {opaque(int256{-1})};
+
+    // BOOST_TEST(a == b) rather than BOOST_TEST_EQ throughout this function:
+    // int256 has no operator<< until D2 lands, and BOOST_TEST_EQ would try to
+    // stream the operands on a failure (currently ambiguous).
+
+    // MIN's magnitude (2^255) is not representable, so negation and abs both
+    // wrap it back to itself, exactly like the built-in signed integers.
+    BOOST_TEST(-min_v == min_v);
+    BOOST_TEST(boost::int256::abs(min_v) == min_v);
+    BOOST_TEST(boost::int256::abs(min_v + one) == max_v);
+    BOOST_TEST(boost::int256::abs(max_v) == max_v);
+    BOOST_TEST(boost::int256::abs(minus_one) == one);
+
+    // MIN / -1 wraps to MIN instead of overflowing (the mathematical quotient
+    // 2^255 is not representable); MIN % -1 is exactly zero.
+    BOOST_TEST(min_v / minus_one == min_v);
+    BOOST_TEST(min_v % minus_one == zero);
+
+    // Wraparound at the signed range boundary.
+    BOOST_TEST(max_v + one == min_v);
+    BOOST_TEST(min_v - one == max_v);
+
+    // Arithmetic right shift sign extends; logical left shift wraps in the
+    // unsigned domain regardless of sign.
+    BOOST_TEST((minus_one >> opaque(255)) == minus_one);
+    BOOST_TEST((min_v >> opaque(1)) == opaque(int256{static_cast<std::int64_t>(UINT64_C(0xC000000000000000)), UINT64_C(0), UINT64_C(0), UINT64_C(0)}));
+    BOOST_TEST((min_v << opaque(1)) == zero);
+
+    // int256 / uint256 and %= use unsigned semantics on the right-hand side
+    // (the int128 defect B regression is pinned in detail in
+    // test_mixed_type_sign_conversion.cpp); here just the basic compound form
+    // on a builtin scalar.
+    {
+        int256 t {max_v};
+        t += one;
+        BOOST_TEST(t == min_v);
+    }
+    {
+        int256 t {min_v};
+        t -= one;
+        BOOST_TEST(t == max_v);
+    }
+    {
+        int256 t {min_v};
+        t /= minus_one;
+        BOOST_TEST(t == min_v);
+    }
+
+    // The signed mixed paths must agree with promoting the scalar first,
+    // including for the most negative int64_t, which cannot be negated inside
+    // its own type.
+    const auto m {opaque(static_cast<std::int64_t>((std::numeric_limits<std::int64_t>::min)()))};
+    const int256 m256 {m};
+    const auto a {opaque(int256{INT64_C(42), UINT64_C(0), UINT64_C(1234), UINT64_C(7)})};
+    const auto b {opaque(int256{INT64_C(0), UINT64_C(0), UINT64_C(0), UINT64_C(5)})};
+
+    BOOST_TEST(a + m == a + m256);
+    BOOST_TEST(m + a == m256 + a);
+    BOOST_TEST(a - m == a - m256);
+    BOOST_TEST(m - a == m256 - a);
+    BOOST_TEST(a * m == a * m256);
+    BOOST_TEST(m * a == m256 * a);
+    BOOST_TEST(a / m == a / m256);
+    BOOST_TEST(a % m == a % m256);
+    BOOST_TEST(m / b == m256 / b);
+    BOOST_TEST(m % b == m256 % b);
+}
+
+#endif // BOOST_INT256_TEST_HAS_SIGNED
 
 int main()
 {
@@ -143,6 +239,10 @@ int main()
         --t;
         BOOST_TEST_EQ(t, (uint256{UINT64_C(0), UINT64_MAX, UINT64_MAX, UINT64_MAX}));
     }
+
+#if defined(BOOST_INT256_TEST_HAS_SIGNED)
+    test_signed_boundaries();
+#endif
 
     return boost::report_errors();
 }
