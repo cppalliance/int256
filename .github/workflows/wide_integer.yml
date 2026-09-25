@@ -1,0 +1,175 @@
+# ------------------------------------------------------------------------------
+#  Copyright Matt Borland 2026.
+#  Distributed under the Boost Software License,
+#  Version 1.0. (See accompanying file LICENSE_1_0.txt
+#  or copy at http://www.boost.org/LICENSE_1_0.txt)
+# ------------------------------------------------------------------------------
+#
+# Builds and runs test/test_vs_wide_integer.cpp, the deterministic differential
+# test of uint256 and int256 against wide-integer's uintwide_t. It is not in the
+# Jamfile because it needs a wide-integer checkout, and like the library it needs
+# nothing else, so each job is a plain compiler invocation per configuration.
+#
+# Every native job covers each standard with and without the builtin 128-bit
+# type. The emulated jobs are there for the big-endian and 32-bit ARM targets,
+# and use a smaller operand count because QEMU is an order of magnitude slower.
+
+name: wide-integer
+
+on:
+  push:
+    branches:
+      - master
+      - develop
+      - feature/**
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  posix:
+    name: ${{ matrix.title }}
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - title: Linux x64 GCC 14
+            os: ubuntu-latest
+            compiler: g++-14
+            packages: g++-14
+            cxxflags: ''
+            standards: 'c++14 c++17 c++20 c++23'
+          - title: Linux x64 Clang
+            os: ubuntu-latest
+            compiler: clang++
+            packages: ''
+            cxxflags: ''
+            standards: 'c++14 c++17 c++20 c++23'
+          - title: Linux x64 Clang ASan and UBSan
+            os: ubuntu-latest
+            compiler: clang++
+            packages: ''
+            cxxflags: '-g -fsanitize=address,undefined -fno-sanitize-recover=all'
+            standards: 'c++14 c++20'
+          - title: Linux x86 (32-bit) GCC 14
+            os: ubuntu-latest
+            compiler: g++-14
+            packages: g++-14 g++-14-multilib
+            cxxflags: '-m32'
+            standards: 'c++14 c++20'
+          - title: Linux ARM64 GCC 14
+            os: ubuntu-24.04-arm
+            compiler: g++-14
+            packages: g++-14
+            cxxflags: ''
+            standards: 'c++14 c++20'
+          - title: macOS ARM64 Clang
+            os: macos-latest
+            compiler: clang++
+            packages: ''
+            cxxflags: ''
+            standards: 'c++14 c++20'
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install packages
+        if: matrix.packages != ''
+        run: |
+          sudo apt-get -o Acquire::Retries=5 update
+          sudo apt-get -o Acquire::Retries=5 install -y ${{ matrix.packages }}
+      - name: Clone wide-integer
+        run: git clone -b master --depth 1 https://github.com/ckormanyos/wide-integer.git ../wide-integer
+      - name: Build and run
+        run: |
+          ${{ matrix.compiler }} --version
+          for std in ${{ matrix.standards }}; do
+            for config in '' '-DBOOST_INT256_NO_BUILTIN_INT128'; do
+              echo "::group::-std=$std $config"
+              ${{ matrix.compiler }} -std=$std -O2 -Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion \
+                -Wold-style-cast -Wshadow -Wundef -Werror $config ${{ matrix.cxxflags }} \
+                -isystem ../wide-integer -I include test/test_vs_wide_integer.cpp -o test_vs_wide_integer
+              ./test_vs_wide_integer
+              echo "::endgroup::"
+            done
+          done
+
+  windows:
+    name: ${{ matrix.title }}
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - title: Windows x64 MSVC
+            arch: x64
+          - title: Windows x86 (32-bit) MSVC
+            arch: x86
+    steps:
+      - uses: actions/checkout@v6
+      - name: Clone wide-integer
+        run: git clone -b master --depth 1 https://github.com/ckormanyos/wide-integer.git ../wide-integer
+      - uses: TheMrMilchmann/setup-msvc-dev@v4
+        with:
+          arch: ${{ matrix.arch }}
+      # Options are spelled with a dash: git-bash rewrites a leading slash as a path
+      - name: Build and run
+        run: |
+          for std in c++14 c++17 c++20 c++latest; do
+            for config in '' '-DBOOST_INT256_NO_BUILTIN_INT128'; do
+              echo "::group::-std:$std $config"
+              cl -nologo -std:$std -O2 -EHsc -W4 -WX -permissive- $config \
+                -external:W0 -external:I ../wide-integer -I include \
+                test/test_vs_wide_integer.cpp -Fe:test_vs_wide_integer.exe
+              ./test_vs_wide_integer.exe
+              echo "::endgroup::"
+            done
+          done
+
+  emulated:
+    name: ${{ matrix.title }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    defaults:
+      run:
+        shell: bash
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - title: Linux s390x (emulated, big-endian)
+            platform: linux/s390x
+            image: s390x/debian:bookworm
+          - title: Linux ARM32 (emulated)
+            platform: linux/arm/v7
+            image: debian:bookworm
+    steps:
+      - uses: actions/checkout@v6
+      - name: Clone wide-integer
+        run: git clone -b master --depth 1 https://github.com/ckormanyos/wide-integer.git ../wide-integer
+      - uses: docker/setup-qemu-action@v4
+      - name: Build and run
+        run: |
+          docker run --rm --platform ${{ matrix.platform }} \
+            -v "$GITHUB_WORKSPACE":/work:ro \
+            -v "$GITHUB_WORKSPACE/../wide-integer":/wide-integer:ro \
+            -e DEBIAN_FRONTEND=noninteractive \
+            -w /tmp ${{ matrix.image }} bash -c "
+              set -e
+              apt-get -o Acquire::Retries=5 update
+              apt-get -o Acquire::Retries=5 install -y g++
+              g++ --version
+              for config in 'c++14:' 'c++20:-DBOOST_INT256_NO_BUILTIN_INT128'; do
+                std=\${config%%:*}
+                define=\${config#*:}
+                echo \"::group::-std=\$std \$define\"
+                g++ -std=\$std -O2 -Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion -Werror \$define \
+                  -isystem /wide-integer -I /work/include /work/test/test_vs_wide_integer.cpp -o test_vs_wide_integer
+                ./test_vs_wide_integer --iterations 8
+                echo '::endgroup::'
+              done
+            "

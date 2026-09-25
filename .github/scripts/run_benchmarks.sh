@@ -3,9 +3,9 @@
 # Distributed under the Boost Software License, Version 1.0.
 # https://www.boost.org/LICENSE_1_0.txt
 #
-# Builds the benchmark driver in release mode and runs it, leaving u256.json in
-# the --out directory. That file is exactly what doc/render_benchmarks.py
-# consumes.
+# Builds both benchmark drivers in release mode and runs them, leaving u256.json
+# and i256.json in the --out directory. Those two files are exactly what
+# doc/render_benchmarks.py consumes.
 #
 # Run it from the root of a Boost tree that has this library in libs/int256; the
 # include path is every libs/*/include in that tree, so no b2 headers step is
@@ -14,7 +14,10 @@
 #
 # --sources names extra translation units to build alongside the driver, for a
 # comparator that is not header only. Nothing needs it today: the baseline is
-# Boost.Multiprecision, which comes out of the Boost tree as headers.
+# Boost.Multiprecision, which comes out of the Boost tree as headers, and the
+# second comparator is wide-integer, also header only. A wide-integer checkout at
+# the root of the Boost tree (setup_benchmarks.sh makes one) goes on the include
+# path, and the drivers measure uintwide_t whenever its header is found.
 #
 #   .github/scripts/run_benchmarks.sh --compiler g++-14 --out /tmp/results
 #   .github/scripts/run_benchmarks.sh --msvc --elements 5000000 --out C:/results
@@ -65,7 +68,11 @@ for dir in libs/*/include libs/*/*/include; do
     fi
 done
 
-for sign in u256; do
+if [ -f wide-integer/math/wide_integer/uintwide_t.h ]; then
+    INCLUDES="$INCLUDES -Iwide-integer"
+fi
+
+for sign in u256 i256; do
     source_file="libs/int256/test/benchmark_$sign.cpp"
 
     if [ "$MSVC" = 1 ]; then

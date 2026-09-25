@@ -39,4 +39,12 @@ done
 git submodule update --init tools/boostdep
 "$PYTHON" tools/boostdep/depinst/depinst.py --git_args "--jobs ${GIT_FETCH_JOBS:-4}" "$LIBRARY"
 
+# The second comparator, header only. It goes inside the Boost tree so that the
+# emulated jobs, which mount only that tree, see it too; run_benchmarks.sh adds
+# it to the include path when it is there. WIDE_INTEGER_REF pins a commit so that
+# the published numbers stay comparable from run to run.
+git init -q wide-integer
+git -C wide-integer fetch -q --depth 1 https://github.com/ckormanyos/wide-integer.git "${WIDE_INTEGER_REF:-master}"
+git -C wide-integer checkout -q FETCH_HEAD
+
 echo "BOOST_ROOT=$(pwd)" >> "$GITHUB_ENV"

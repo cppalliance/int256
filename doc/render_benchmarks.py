@@ -55,10 +55,10 @@ GROUP = 'random_width'
 # including this line is preserved; everything after it is rewritten.
 SENTINEL = '// BENCHMARK-RESULTS-GENERATED'
 
-# The benchmark pages, keyed by the "sign" field of a data set. A signed int256
-# is planned, so this stays a mapping rather than a single file name.
+# The benchmark pages, keyed by the "sign" field of a data set.
 PAGES = {
     'u256': 'u256_benchmarks.adoc',
+    'i256': 'i256_benchmarks.adoc',
 }
 
 # Section order and headings. The operating system anchors are linked from
@@ -88,6 +88,7 @@ REGRESSION_THRESHOLD = 5.0
 # No platform has a hardware 256-bit type, so the baseline is always a library.
 BASELINE_PRIORITY = {
     'u256': ['boost::mp::uint256', 'uintwide_t<256>'],
+    'i256': ['boost::mp::int256', 'intwide_t<256>'],
 }
 
 

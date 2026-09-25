@@ -5,9 +5,10 @@
 #  or copy at http://www.boost.org/LICENSE_1_0.txt)
 # ------------------------------------------------------------------------------
 #
-# Builds and runs test/benchmark_u256.cpp in release mode across the platforms
-# documented on the benchmark page, and uploads one benchmarks-<os>-<arch>
-# artifact per platform holding u256.json.
+# Builds and runs test/benchmark_u256.cpp and test/benchmark_i256.cpp in release
+# mode across the platforms documented on the two benchmark pages, and uploads
+# one benchmarks-<os>-<arch> artifact per platform holding u256.json and
+# i256.json.
 #
 # To refresh the documentation: download the artifacts, unpack the
 # benchmarks-<os>-<arch> folders into doc/modules/ROOT/data, and run
@@ -20,10 +21,12 @@
 # element count lands in the data set and is printed in the documentation, so the
 # tables stay honest about what was measured.
 #
-# The comparison baseline is boost::multiprecision::uint256_t, which every job
-# gets from the Boost tree that setup_benchmarks.sh checks out, so no job needs a
-# package or a source checkout of its own. There is no 256-bit Abseil type to
-# compare against.
+# The comparison baseline is boost::multiprecision::uint256_t (int256_t for the
+# signed driver), which every job gets from the Boost tree that
+# setup_benchmarks.sh checks out. The second comparator is wide-integer's
+# uintwide_t, which setup_benchmarks.sh checks out into that same tree at the
+# WIDE_INTEGER_REF commit below; both are header only, so no job needs a package.
+# There is no 256-bit Abseil type to compare against.
 #
 # Every pull request gets a full set of runs: the step summary of each job
 # compares the fresh numbers against the ones committed under
@@ -68,6 +71,9 @@ env:
   ELEMENTS: ${{ inputs.elements || '10000000' }}
   EMULATED_ELEMENTS: ${{ inputs.emulated_elements || '1000000' }}
   REPETITIONS: ${{ inputs.repetitions || '5' }}
+  # The wide-integer commit every job measures, master at the time of writing.
+  # Move it deliberately, and republish, so runs stay comparable.
+  WIDE_INTEGER_REF: '5c0d550088862e804f10d9a5f00e5c0f73d87c3f'
 
 jobs:
   linux:
