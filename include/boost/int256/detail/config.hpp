@@ -105,6 +105,46 @@ BOOST_INT256_TEST_EXPORT using builtin_u128 = std::_Unsigned128;
 } // namespace int256
 } // namespace boost
 
+// Sidesteps an MSVC ambiguity between uint256's operator|/operator<< and
+// std::_Unsigned128's hidden friends; must stay a sibling of int256, not top level
+#if !defined(BOOST_INT256_BUILD_MODULE) || defined(BOOST_INT256_INTERFACE_UNIT)
+
+namespace boost {
+namespace int256_detail {
+
+// Not constexpr before _MSC_VER 1945, hence BOOST_INT256_BUILTIN_CONSTEXPR rather than
+// a bare constexpr, matching every other builtin128 touch in this library
+BOOST_INT256_BUILTIN_CONSTEXPR std::_Unsigned128 builtin128_from_words(const unsigned long long hi, const unsigned long long lo) noexcept
+{
+    return (static_cast<std::_Unsigned128>(hi) << 64) | static_cast<std::_Unsigned128>(lo);
+}
+
+// Every other spot that shifts two already-builtin128-typed operands (a shift count)
+// has the same ambiguity risk once any boost::int256::operator<</operator>> overload
+// exists for a (library, builtin128) pair, for the same reason as builtin128_from_words
+// above (finding F12). Routing through here, rather than trying to keep the call site's
+// own operand types exact enough to dodge it, is the one fix that stays correct
+// regardless of what else this library later adds
+BOOST_INT256_BUILTIN_CONSTEXPR std::_Unsigned128 builtin128_shr_u(const std::_Unsigned128 v, const unsigned long long amount) noexcept
+{
+    return v >> amount;
+}
+
+BOOST_INT256_BUILTIN_CONSTEXPR std::_Signed128 builtin128_shr_i(const std::_Signed128 v, const unsigned long long amount) noexcept
+{
+    return v >> amount;
+}
+
+BOOST_INT256_BUILTIN_CONSTEXPR std::_Unsigned128 builtin128_shl_u(const std::_Unsigned128 v, const unsigned long long amount) noexcept
+{
+    return v << amount;
+}
+
+} // namespace int256_detail
+} // namespace boost
+
+#endif
+
 #endif // builtin 128-bit detection
 
 // Determine endianness. The word order of uint256 is fixed on every platform, so this
@@ -240,8 +280,16 @@ BOOST_INT256_TEST_EXPORT using builtin_u128 = std::_Unsigned128;
 #  define BOOST_INT256_HAS_FAST_DIV128
 #endif
 
-// The builtin is only constexpr from clang-7 or GCC-10
-#ifdef __has_builtin
+// The builtin is only constexpr from clang-7 or GCC-10. __has_builtin reports these as
+// available on the nvcc device pass too, but the underlying implementation is host-only
+// there: calling either from a __host__ __device__ function draws nvcc #20011-D, and at
+// runtime every device result silently comes back zero. Excluding __CUDA_ARCH__ forces
+// the device pass onto the portable add_carry/sub_borrow chain instead (same fix Boost.
+// Int128 applies to its own division and carry intrinsics under CUDA). SYCL's DPC++
+// front end is clang-based and appears to lower these correctly on device, but every
+// other intrinsic guard in this file excludes both device targets together, so this one
+// does too rather than relying on that
+#if defined(__has_builtin) && !defined(__CUDA_ARCH__) && !defined(__SYCL_DEVICE_ONLY__)
 #  if __has_builtin(__builtin_sub_overflow) && ((defined(__clang__) && __clang_major__ >= 7) || (defined(__GNUC__) && __GNUC__ >= 10))
 #    define BOOST_INT256_HAS_BUILTIN_SUB_OVERFLOW
 #  endif
@@ -383,5 +431,15 @@ BOOST_INT256_TEST_EXPORT using builtin_u128 = std::_Unsigned128;
 // Exactly one sub-macro is ever non-empty; expands to "__host__ __device__" (CUDA),
 // "SYCL_EXTERNAL" (SYCL), or nothing (host).
 #define BOOST_INT256_HOST_DEVICE BOOST_INT256_CUDA_ENABLED BOOST_INT256_SYCL_ENABLED
+
+// C++23 <stdfloat> extended floating-point types
+#if (__cplusplus > 202002L || (defined(_MSVC_LANG) && _MSVC_LANG > 202002L)) && !defined(BOOST_INT256_HAS_GPU_SUPPORT) && defined(__has_include)
+#  if __has_include(<stdfloat>)
+#    ifndef BOOST_INT256_BUILD_MODULE
+#      include <stdfloat>
+#    endif
+#    define BOOST_INT256_HAS_STDFLOAT
+#  endif
+#endif
 
 #endif // BOOST_INT256_DETAIL_CONFIG_HPP
