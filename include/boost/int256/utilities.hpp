@@ -198,6 +198,68 @@ BOOST_INT256_EXPORT BOOST_INT256_HOST_DEVICE constexpr uint256 isqrt(const uint2
     }
 }
 
+// Signed overload of powm. Returns the non-negative residue in [0, m); m <= 0 or
+// exp < 0 gives 0. A negative base is reduced into [0, m) before the unsigned
+// exponentiation runs, rather than letting a negative residue come back out of it.
+BOOST_INT256_EXPORT BOOST_INT256_HOST_DEVICE constexpr int256 powm(const int256& base, const int256& exp, const int256& m) noexcept
+{
+    if (BOOST_INT256_UNLIKELY(m <= 0 || exp < 0))
+    {
+        return int256{};
+    }
+
+    const auto um {static_cast<uint256>(m)};
+
+    uint256 ub {};
+
+    if (base.signed_high() < 0)
+    {
+        const auto magnitude {static_cast<uint256>(abs(base))};
+        const auto r {magnitude % um};
+        ub = r == 0U ? uint256{} : um - r;
+    }
+    else
+    {
+        ub = static_cast<uint256>(base) % um;
+    }
+
+    return detail::to_signed_bits(powm(ub, static_cast<uint256>(exp), um));
+}
+
+// Signed overload of ipow. Wraps modulo 2^256 on overflow, matching operator*.
+BOOST_INT256_EXPORT BOOST_INT256_HOST_DEVICE constexpr int256 ipow(int256 base, std::uint64_t exp) noexcept
+{
+    int256 result {1};
+
+    while (exp != 0U)
+    {
+        if (static_cast<bool>(exp & 1U))
+        {
+            result *= base;
+        }
+
+        exp >>= 1U;
+
+        if (exp != 0U)
+        {
+            base *= base;
+        }
+    }
+
+    return result;
+}
+
+// Signed overload of isqrt. A negative input returns 0.
+BOOST_INT256_EXPORT BOOST_INT256_HOST_DEVICE constexpr int256 isqrt(const int256& n) noexcept
+{
+    if (BOOST_INT256_UNLIKELY(n.signed_high() < 0))
+    {
+        return int256{};
+    }
+
+    return detail::to_signed_bits(isqrt(static_cast<uint256>(n)));
+}
+
 namespace detail {
 
 // The C23 checked integer macros accept any integer type for their operands
@@ -212,10 +274,16 @@ struct valid_checked_type : std::integral_constant<bool, (std::is_integral<T>::v
 template <>
 struct valid_checked_type<uint256> : std::true_type {};
 
+template <>
+struct valid_checked_type<int256> : std::true_type {};
+
 // Whether an operand type carries a sign. std::numeric_limits is not required to be
 // specialized for the builtin 128-bit types, so the library trait answers instead.
+// int256 is added directly rather than through is_signed_integer_v, which backs the
+// SignedInteger concept used to mix a builtin into int256 itself and must not also
+// match int256 (that would make int256 op int256 ambiguous with int256 op SignedInteger)
 template <typename T>
-BOOST_INT256_INLINE_CONSTEXPR bool is_signed_operand_v = is_signed_integer_v<T>;
+BOOST_INT256_INLINE_CONSTEXPR bool is_signed_operand_v = is_signed_integer_v<T> || std::is_same<T, int256>::value;
 
 // The extreme values of a target type expressed as 256-bit magnitudes, so the checked
 // and comparison functions never need std::numeric_limits of a builtin 128-bit type
@@ -265,11 +333,15 @@ struct decomposed_limits<builtin_i128>
 {
     static BOOST_INT256_HOST_DEVICE BOOST_INT256_BUILTIN_CONSTEXPR builtin_i128 max_value() noexcept
     {
-        // The right operand is a builtin_u128 rather than an int on purpose. With
-        // uint256's implicit converting constructor in scope, `builtin_u128 >> int`
-        // is ambiguous on MSVC, where builtin_u128 is the class std::_Unsigned128
-        // rather than a builtin type.
+        // On MSVC this is routed through the isolated-namespace helper (see
+        // config.hpp): a plain infix >> here, even with an exactly typed right
+        // operand, is ambiguous between std::_Unsigned128's hidden friend and
+        // uint256's own operator>>(uint256, builtin_u128) exact match (finding F12)
+        #ifdef BOOST_INT256_HAS_MSVC_INT128
+        return static_cast<builtin_i128>(boost::int256_detail::builtin128_shr_u(~static_cast<builtin_u128>(0), 1));
+        #else
         return static_cast<builtin_i128>(~static_cast<builtin_u128>(0) >> static_cast<builtin_u128>(1));
+        #endif
     }
 
     static BOOST_INT256_HOST_DEVICE constexpr uint256 max_magnitude() noexcept
@@ -467,7 +539,8 @@ BOOST_INT256_INLINE_CONSTEXPR bool is_valid_comparison_type_v = valid_comparison
 
 // Allow the builtins to be used when available
 template <typename T>
-BOOST_INT256_INLINE_CONSTEXPR bool is_wide_type_v = std::is_same<T, uint256>::value
+BOOST_INT256_INLINE_CONSTEXPR bool is_wide_type_v = std::is_same<T, uint256>::value ||
+                                                    std::is_same<T, int256>::value
     #if defined(BOOST_INT256_HAS_INT128) || defined(BOOST_INT256_HAS_MSVC_INT128)
                                                     || std::is_same<T, builtin_i128>::value
                                                     || std::is_same<T, builtin_u128>::value
